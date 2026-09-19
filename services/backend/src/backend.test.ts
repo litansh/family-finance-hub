@@ -212,6 +212,15 @@ describe('the hub keeps its own data', () => {
       expect((await put('/api/strategy', bad)).statusCode).toBe(400);
   });
 
+  it('subscribes a phone through the API and reports only a count back', async () => {
+    const body = { subscription: { endpoint: 'https://web.push.apple.com/QabcDEF', keys: { p256dh: 'BPk_x-Y1', auth: 'a_b-C2' } } };
+    expect((await put('/api/push', body)).statusCode).toBe(200);
+    expect((await put('/api/push', { subscription: { ...body.subscription, endpoint: 'https://evil.example.com/x' } })).statusCode).toBe(400);
+    const status = JSON.parse((await handle(event('/api/push', await sign({ email: 'alex@example.com' })), deps) as { body: string }).body);
+    expect(status).toMatchObject({ devices: 1 });
+    expect(JSON.stringify(status)).not.toContain('QabcDEF');
+  });
+
   it('never lets a write touch RiseUp data or escape user/', async () => {
     const before = [...store.data.keys()].filter((k) => !k.startsWith('user/')).map((k) => [k, store.data.get(k)]);
     await put('/api/override', { transactionId: 'x', category: 'a' });

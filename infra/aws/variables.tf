@@ -71,3 +71,15 @@ variable "anthropic_workspace_id" {
   default     = ""
   sensitive   = true
 }
+
+# Web Push signing keys (`npx web-push generate-vapid-keys`). Empty = no phone notifications.
+variable "vapid_public_key" {
+  type    = string
+  default = ""
+}
+
+variable "vapid_private_key" {
+  type      = string
+  default   = ""
+  sensitive = true
+}

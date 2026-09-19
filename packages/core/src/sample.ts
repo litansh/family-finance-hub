@@ -20,11 +20,22 @@ const BANK = { accountNickname: 'Joint account', accountNumberHash: 'c0a8b1', so
 
 interface Fixed { name: string; cat: string; amount: number; day: number; acct: typeof BANK; from?: string; raise?: [string, number] }
 
-const INCOME = [
-  { name: 'משכורת · Alex', amount: 27400, day: 9 },
-  { name: 'משכורת · Noa', amount: 18900, day: 10 },
-  { name: 'קצבת ילדים', amount: 336, day: 20 },
-];
+// Two demo households share every expense. One lives within its means; the
+// other lost a salary and spends more than it earns, which is what the path to
+// balance, the purchase check and the brief are for.
+export type SampleVariant = 'comfortable' | 'tight';
+const INCOMES: Record<SampleVariant, { name: string; amount: number; day: number }[]> = {
+  comfortable: [
+    { name: 'משכורת · Alex', amount: 27400, day: 9 },
+    { name: 'משכורת · Noa', amount: 18900, day: 10 },
+    { name: 'קצבת ילדים', amount: 336, day: 20 },
+  ],
+  tight: [
+    { name: 'משכורת · Alex', amount: 24800, day: 9 },
+    { name: 'קצבת ילדים', amount: 336, day: 20 },
+  ],
+};
+let INCOME = INCOMES.comfortable;
 
 const FIXED: Fixed[] = [
   { name: 'משכנתא · בנק לאומי', cat: 'משכנתא', amount: 7850, day: 10, acct: BANK },
@@ -204,7 +215,8 @@ function budgetFor(month: string, txns: RiseupTransaction[], excluded: RiseupTra
   return { budgetDate: month, lastUpdatedAt: new Date().toISOString(), envelopes, excluded: excluded.map(toActual) };
 }
 
-export function sampleData(today: string, monthsBack = 11) {
+export function sampleData(today: string, monthsBack = 11, variant: SampleVariant = 'comfortable') {
+  INCOME = INCOMES[variant];
   const current = today.slice(0, 7);
   const transactions: StoredTransaction[] = [];
   const budgets = new Map<string, RiseupBudget>();

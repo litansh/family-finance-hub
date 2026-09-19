@@ -14,10 +14,11 @@ const common = { bundle: true, platform: 'node', target: 'node22', format: 'esm'
 await build({ ...common, entryPoints: ['src/api.ts'], outfile: 'dist/api/index.mjs' });
 await build({ ...common, entryPoints: ['src/sync.ts'], outfile: 'dist/sync/index.mjs' });
 await build({ ...common, entryPoints: ['src/assistant.ts'], outfile: 'dist/assistant/index.mjs' });
+await build({ ...common, entryPoints: ['src/push.ts'], outfile: 'dist/brief/index.mjs' });
 
 // The sync Lambda runs the official RiseUp MCP server as a child process, so
 // the server ships as its own self-contained bundle next to the handler.
 const entry = join(dirname(require.resolve('@riseup-oss/mcp/package.json')), 'dist/index.js');
 await build({ ...common, entryPoints: [entry], outfile: 'dist/sync/riseup-mcp.mjs' });
 mkdirSync('dist/zips', { recursive: true });
-console.log('bundled: dist/api, dist/sync, dist/assistant');
+console.log('bundled: dist/api, dist/sync, dist/assistant, dist/brief');

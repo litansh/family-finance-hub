@@ -21,6 +21,7 @@ export const keys = {
   shifts: 'user/budget-shifts.json',
   commitments: 'user/commitments.json',
   strategy: 'user/strategy.json',
+  push: 'user/push.json',
   chat: (jobId: string) => `user/chat/${jobId}.json`,
   layout: (emailHash: string) => `user/layout/${emailHash}.json`,
 };

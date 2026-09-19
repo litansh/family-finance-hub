@@ -24,9 +24,19 @@ const local = {
 };
 export const localLayout = { get: () => local.get<unknown>('layout', null), set: (v: unknown) => local.set('layout', v) };
 
+// `?demo=tight` shows a household that spends more than it earns, so the planner
+// and the purchase check have something to say. It sticks for the session.
+function demoVariant(): 'comfortable' | 'tight' {
+  try {
+    const asked = new URLSearchParams(window.location.search).get('demo');
+    if (asked === 'tight' || asked === 'comfortable') sessionStorage.setItem('hub:demo', asked);
+    return sessionStorage.getItem('hub:demo') === 'tight' ? 'tight' : 'comfortable';
+  } catch { return 'comfortable'; }
+}
+
 function sampleDashboard(month?: string): HubData {
   const today = todayIso();
-  const { transactions, budgets, current } = sampleData(today);
+  const { transactions, budgets, current } = sampleData(today, 11, demoVariant());
   const budget = budgets.get(month ?? current) ?? budgets.get(current)!;
   const d = buildDashboard({
     budget, transactions, today,

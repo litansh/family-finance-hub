@@ -92,6 +92,34 @@ Without the secret it falls back to the SSM parameter named by
 `anthropic_key_param` (in `anthropic_key_region`), for sharing one key between
 projects in the same account.
 
+## The daily brief on the phone
+
+Every morning at 07:30 (Israel time, after the 06:00 sync) the `<project>-brief`
+Lambda tells each subscribed phone that the brief is ready. The notification
+carries no amount and no name; the figures appear only inside the hub.
+
+Once, generate the Web Push signing keys and store them as secrets. Without them
+the feature stays off and the schedule is disabled:
+
+```bash
+npx web-push generate-vapid-keys        # prints a public and a private key
+gh secret set VAPID_PUBLIC_KEY  --repo <owner>/<repo> --env production
+gh secret set VAPID_PRIVATE_KEY --repo <owner>/<repo> --env production
+gh workflow run deploy.yml --repo <owner>/<repo>
+```
+
+On each phone: open the hub **from the Home Screen icon** (iOS delivers web
+notifications only to an installed web app, iOS 16.4 or later), then ⚙ →
+"הסיכום היומי לטלפון" → הפעלה. Send a test to every subscribed phone with:
+
+```bash
+gh workflow run brief.yml --repo <owner>/<repo> -f test=true
+```
+
+Subscriptions live in `user/push.json`. Only the browsers' own push services are
+accepted as endpoints. A phone whose subscription died is marked and skipped, and
+subscribes again by itself the next time the hub is opened on it.
+
 ## Google sign-in
 
 Without this, Access emails a one-time PIN, which already works. For Google,

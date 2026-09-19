@@ -74,6 +74,12 @@ data "archive_file" "assistant" {
   output_path = "${local.dist}/zips/assistant.zip"
 }
 
+data "archive_file" "brief" {
+  type        = "zip"
+  source_dir  = "${local.dist}/brief"
+  output_path = "${local.dist}/zips/brief.zip"
+}
+
 data "archive_file" "api" {
   type        = "zip"
   source_dir  = "${local.dist}/api"
@@ -139,7 +145,7 @@ resource "aws_iam_role_policy" "api" {
 }
 
 resource "aws_cloudwatch_log_group" "lambda" {
-  for_each          = toset(["sync", "api", "assistant"])
+  for_each          = toset(["sync", "api", "assistant", "brief"])
   name              = "/aws/lambda/${local.name}-${each.key}"
   retention_in_days = 30
 }
@@ -180,6 +186,30 @@ resource "aws_lambda_function" "api" {
       ALLOWED_EMAILS     = join(",", var.allowed_emails)
       PAT_EXPIRES_AT     = var.pat_expires_at
       ASSISTANT_FUNCTION = "${local.name}-assistant"
+      VAPID_PUBLIC_KEY   = var.vapid_public_key # public by design: the phone needs it to subscribe
+    }
+  }
+  depends_on = [aws_cloudwatch_log_group.lambda]
+}
+
+# Every morning: tells each subscribed phone that the daily brief is ready. The
+# notification carries no figures; those appear only inside the hub.
+resource "aws_lambda_function" "brief" {
+  function_name    = "${local.name}-brief"
+  role             = aws_iam_role.api.arn
+  runtime          = "nodejs22.x"
+  architectures    = ["arm64"]
+  handler          = "index.handler"
+  filename         = data.archive_file.brief.output_path
+  source_code_hash = data.archive_file.brief.output_base64sha256
+  timeout          = 60
+  memory_size      = 256
+  environment {
+    variables = {
+      DATA_BUCKET       = aws_s3_bucket.data.id
+      VAPID_PUBLIC_KEY  = var.vapid_public_key
+      VAPID_PRIVATE_KEY = var.vapid_private_key
+      VAPID_SUBJECT     = "mailto:${var.alert_email}"
     }
   }
   depends_on = [aws_cloudwatch_log_group.lambda]
@@ -275,7 +305,7 @@ resource "aws_iam_role_policy" "scheduler" {
   role = aws_iam_role.scheduler.id
   policy = jsonencode({
     Version   = "2012-10-17"
-    Statement = [{ Effect = "Allow", Action = "lambda:InvokeFunction", Resource = aws_lambda_function.sync.arn }]
+    Statement = [{ Effect = "Allow", Action = "lambda:InvokeFunction", Resource = [aws_lambda_function.sync.arn, aws_lambda_function.brief.arn] }]
   })
 }
 
@@ -289,6 +319,20 @@ resource "aws_scheduler_schedule" "sync" {
     arn      = aws_lambda_function.sync.arn
     role_arn = aws_iam_role.scheduler.arn
     input    = jsonencode({ monthsBack = 1 })
+  }
+}
+
+# After the 06:00 sync, so the brief is built on this morning's data.
+resource "aws_scheduler_schedule" "brief" {
+  name                         = "${local.name}-brief"
+  schedule_expression          = "cron(30 7 * * ? *)"
+  schedule_expression_timezone = "Asia/Jerusalem"
+  state                        = var.vapid_private_key == "" ? "DISABLED" : "ENABLED"
+  flexible_time_window { mode = "OFF" }
+  target {
+    arn      = aws_lambda_function.brief.arn
+    role_arn = aws_iam_role.scheduler.arn
+    input    = jsonencode({})
   }
 }
 

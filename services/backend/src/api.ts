@@ -6,6 +6,7 @@ import { AccessDenied, verifyAccess, type AccessConfig } from './access.ts';
 import type { AskJob, ChatTurn } from './assistant.ts';
 import { emptyMeta, keys, S3Store, type Meta, type Store } from './store.ts';
 import { BadRequest, loadUserData, saveLayout, saveOverride, saveCommitment, savePlans, saveShift, saveStrategy, saveRecoStatus } from './userdata.ts';
+import { pushStatus, savePush } from './push.ts';
 
 const HISTORY_MONTHS = 13;
 
@@ -58,7 +59,7 @@ export async function handle(event: APIGatewayProxyEventV2, deps: ApiDeps): Prom
     }
   }
   if (method === 'PUT') {
-    const save = { '/api/layout': saveLayout, '/api/override': saveOverride, '/api/reco': saveRecoStatus, '/api/plans': savePlans, '/api/shift': saveShift, '/api/commitment': saveCommitment, '/api/strategy': saveStrategy }[path];
+    const save = { '/api/layout': saveLayout, '/api/override': saveOverride, '/api/reco': saveRecoStatus, '/api/plans': savePlans, '/api/shift': saveShift, '/api/commitment': saveCommitment, '/api/strategy': saveStrategy, '/api/push': savePush }[path];
     if (!save) return json(404, { error: 'not found' });
     try {
       const raw = event.isBase64Encoded ? Buffer.from(event.body ?? '', 'base64').toString() : event.body ?? '';
@@ -72,6 +73,7 @@ export async function handle(event: APIGatewayProxyEventV2, deps: ApiDeps): Prom
   }
   if (method !== 'GET') return json(405, { error: 'method not allowed' });
   if (path === '/api/me') return json(200, { email });
+  if (path === '/api/push') return json(200, await pushStatus(deps.store, email));
   if (path === '/api/ask') {
     const id = event.queryStringParameters?.id ?? '';
     if (!/^[a-f0-9]{32}$/.test(id)) return json(400, { error: 'bad id' });

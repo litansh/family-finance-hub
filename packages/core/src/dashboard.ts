@@ -1,3 +1,4 @@
+import { dailyBrief, type DailyBrief } from './brief.ts';
 import { freeToSpend, nextMonth, type BudgetShift, type Commitments, type FreeToSpend, type NextMonth } from './budget.ts';
 import { deriveBaseline, type Baseline, type Plan } from './forecast.ts';
 import { buildAlerts, businessKey, detectRecurring, type Alert, type Recurring } from './insights.ts';
@@ -37,6 +38,7 @@ export interface Dashboard {
   // Money RiseUp keeps out of the cashflow, per month, newest first: transfers in from savings or a
   // loan, the card bill seen from the bank. Money coming in here is how a monthly shortfall gets covered.
   outside: { month: string; moneyIn: number; moneyOut: number }[];
+  brief: DailyBrief; // the daily summary the phone notification points to
   free: FreeToSpend; // what is left for variable spending once fixed charges and commitments are set aside
   categoryNames: string[];
   history: HistoryLine[];
@@ -111,6 +113,8 @@ export function buildDashboard(i: DashboardInputs): Dashboard {
   const hoursSinceSync = i.lastSyncAt ? (Date.parse(`${i.today}T12:00:00Z`) - Date.parse(i.lastSyncAt)) / 3_600_000 : undefined;
   const baseline = deriveBaseline(totals, status, installments);
   const historyLines: HistoryLine[] = upTo.map((t) => ({ id: t.transactionId, k: t.commitmentId ?? businessKey(t.businessName), name: t.businessName, m: t.cashflowDate, d: t.transactionDate.slice(0, 10), a: t.amount, inc: t.isIncome, cat: t.categoryLabel ?? 'אחר', fixed: isFixed(t) }));
+  const next = nextMonth({ status, baseline, installments, history: historyLines, plan: i.plan });
+  const free = freeToSpend(status);
   const byDate = (a: ViewTransaction, b: ViewTransaction) => b.transactionDate.localeCompare(a.transactionDate);
 
   return {
@@ -129,9 +133,10 @@ export function buildDashboard(i: DashboardInputs): Dashboard {
     installments,
     recommendations: buildRecommendations({ status, recurring, installments, months: totals, history: upTo }),
     baseline,
-    nextMonth: nextMonth({ status, baseline, installments, history: historyLines, plan: i.plan }),
+    nextMonth: next,
     shifts: (i.shifts ?? []).filter((s) => s.month === month),
-    free: freeToSpend(status),
+    free,
+    brief: dailyBrief({ status, free, transactions: monthTxns, nextMonth: next, today: i.today, hoursSinceSync }),
     outside: [i.budget, ...(i.previousBudgets ?? [])].map((b) => ({ month: b.budgetDate, moneyIn: (b.excluded ?? []).filter((a) => a.isIncome).reduce((s, a) => s + actualAmount(a), 0), moneyOut: (b.excluded ?? []).filter((a) => !a.isIncome).reduce((s, a) => s + actualAmount(a), 0) })),
     categoryNames: [...new Set(upTo.filter((t) => !t.isIncome).map((t) => t.categoryLabel ?? 'אחר'))].sort((a, b) => a.localeCompare(b, 'he')),
     history: historyLines,

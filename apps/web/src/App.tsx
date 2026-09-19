@@ -2,6 +2,7 @@ import type { ViewTransaction } from '@hub/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Icons, InfoProvider, Sheet, TermSheet } from './components/ui.tsx';
 import { Chat } from './chat.tsx';
+import { disablePush, enablePush, healPush, pushState, type PushState } from './lib/push.ts';
 import { DetailSheet, type Detail } from './details.tsx';
 import { isSample, loadDashboard, localLayout, saveLayout, saveCommitment, saveOverride, savePlans, saveReco, saveShift, saveStrategy, type HubData, type RecoStatus } from './lib/data.ts';
 import { ago, monthLabel } from './lib/format.ts';
@@ -22,6 +23,7 @@ export function App() {
   const [editing, setEditing] = useState(false);
   const [term, setTerm] = useState<TermId>();
   const [sheet, setSheet] = useState<'settings' | 'glossary' | 'chat'>();
+  const [push, setPush] = useState<PushState>('unsupported');
   const [detail, setDetail] = useState<Detail>();
   const [toast, setToast] = useState<string>();
 
@@ -37,6 +39,8 @@ export function App() {
     } catch (e) { setError((e as Error).message); }
   }, [month]);
 
+  // Renew this phone's subscription quietly, then show where notifications stand.
+  useEffect(() => { if (!d) return; void healPush().then(pushState).then(setPush); }, [d === undefined]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { void load(d === undefined); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [load]);
 
   const change = (next: Layout) => { setLayout(next); saveLayout(next).catch(() => say('הסידור נשמר במכשיר הזה בלבד')); };
@@ -154,6 +158,16 @@ export function App() {
             <label>סידור המסכים</label>
             <span className="hint">להזיז חלקים, להעביר אותם בין מסכים או להסתיר. הסידור אישי לכל אחד מכם, ונשמר גם בטלפון וגם במחשב.</span>
             <button className="tool-btn primary" onClick={() => { setEditing(true); setSheet(undefined); }}>לסדר את המסך הנוכחי</button>
+          </div>
+          <div className="field">
+            <label>הסיכום היומי לטלפון</label>
+            <span className="hint">כל בוקר תגיע התראה שהסיכום מוכן. בהתראה עצמה אין סכומים ואין שמות: המספרים מופיעים רק אחרי שמקישים ונכנסים. כל טלפון מפעיל לעצמו.</span>
+            {push === 'on' && <><p className="explain">ההתראות פועלות בטלפון הזה. ✓</p><button className="tool-btn" onClick={async () => setPush(await disablePush())}>כיבוי ההתראות בטלפון הזה</button></>}
+            {push === 'off' && <button className="tool-btn primary" onClick={async () => { try { setPush(await enablePush()); } catch (e) { say((e as Error).message); } }}>הפעלת ההתראות בטלפון הזה</button>}
+            {push === 'blocked' && <p className="explain">ההתראות חסומות בהגדרות הטלפון. כדי להפעיל: הגדרות ← התראות ← "הכספים שלנו" ← לאפשר.</p>}
+            {push === 'needs-home-screen' && <p className="explain">באייפון, התראות מגיעות רק לאפליקציה שנוספה למסך הבית. בספארי: שיתוף ← "הוספה למסך הבית", ואז לפתוח מהאייקון ולחזור לכאן.</p>}
+            {push === 'not-configured' && <p className="explain">ההתראות עוד לא הוגדרו בשרת.</p>}
+            {push === 'unsupported' && <p className="explain">{isSample() ? 'במצב נתוני דוגמה אין התראות.' : 'הדפדפן הזה לא תומך בהתראות.'}</p>}
           </div>
           <button className="tool-btn" style={{ width: '100%' }} onClick={() => setSheet('glossary')}>מילון מונחים והסברים</button>
           {d && !isSample() && <p className="explain" style={{ marginTop: '1rem' }}>מחוברים בתור {d.user.email}</p>}

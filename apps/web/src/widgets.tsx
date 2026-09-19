@@ -182,6 +182,26 @@ function Budgets({ d, open }: Ctx) {
   );
 }
 
+// What happened yesterday, what today allows, what needs a look. The morning
+// notification points here; it carries no figures itself.
+function Brief({ d }: Ctx) {
+  const b = d.brief;
+  if (b.lines.length === 0) return null;
+  const mark = { good: '✓', warn: '!', bad: '!', info: '·' } as const;
+  return (
+    <Section title={b.live ? 'הסיכום של היום' : `סיכום ${monthLabel(b.month)}`} hint={shortDate(b.date)} note="נבנה מאותם מספרים שבמסכים. אפשר לקבל התראה בטלפון כל בוקר שהסיכום מוכן: הגדרות ← הסיכום היומי לטלפון.">
+      <div className="rows">
+        {b.lines.map((l) => (
+          <div className="row" key={l.id}>
+            <span className="name" style={{ whiteSpace: 'normal' }}><span className={`pill ${l.tone === 'good' ? 'ok' : l.tone === 'bad' ? 'p1' : l.tone === 'warn' ? 'p2' : ''}`} aria-hidden>{mark[l.tone]}</span> {l.title}</span>
+            {l.detail && <div className="meta"><span style={{ whiteSpace: 'normal' }}>{l.detail}</span></div>}
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 // Fixed charges, then the categories the family treats as fixed in all but name,
 // then what is really left for everything else.
 function Free({ d, setCommitment, go }: Ctx) {
@@ -657,6 +677,7 @@ function RecoList(c: Ctx) {
 // ---- Registry ----------------------------------------------------------------
 
 export const WIDGETS: Record<string, { name: string; render: (c: Ctx) => ReactNode }> = {
+  brief: { name: 'הסיכום של היום', render: (c) => <Brief {...c} /> },
   hero: { name: 'נשאר להוציא', render: (c) => <Hero {...c} /> },
   free: { name: 'כמה באמת פנוי', render: (c) => <Free {...c} /> },
   kpis: { name: 'מדדי החודש', render: (c) => <Kpis {...c} /> },

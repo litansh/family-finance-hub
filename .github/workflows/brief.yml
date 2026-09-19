@@ -1,0 +1,36 @@
+name: Brief now
+
+# Sends the "daily brief is ready" notification on demand, or a test notice, to
+# every subscribed phone. The scheduled one (07:30 Israel time) does not need this.
+on:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: Send a test notice instead of the daily one
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.PROJECT_NAME }}-ci
+          aws-region: il-central-1
+      - name: Invoke
+        env:
+          PROJECT_NAME: ${{ secrets.PROJECT_NAME }}
+          TEST: ${{ inputs.test }}
+        run: |
+          aws lambda invoke --function-name "$PROJECT_NAME-brief" \
+            --cli-binary-format raw-in-base64-out --cli-read-timeout 90 \
+            --payload "{\"test\":$TEST}" out.json > meta.json
+          # The function returns device counts only: no address, no figure.
+          cat out.json; echo
+          if grep -q FunctionError meta.json; then echo "brief failed" >&2; exit 1; fi

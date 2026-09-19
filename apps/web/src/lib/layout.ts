@@ -9,7 +9,7 @@ export const SCREEN_LABEL: Record<ScreenId, string> = {
 
 // Fixed and variable are kept apart exactly as RiseUp's budget files them.
 export const DEFAULT_LAYOUT: Record<ScreenId, string[]> = {
-  home: ['hero', 'free', 'kpis', 'pace', 'alerts', 'topRecos', 'split'],
+  home: ['brief', 'hero', 'free', 'kpis', 'pace', 'alerts', 'topRecos', 'split'],
   fixed: ['fixedKpis', 'income', 'fixed', 'changes', 'recurringAll'],
   variable: ['variableKpis', 'budgets', 'shifts', 'everyday', 'biggest', 'installments'],
   txns: ['compare', 'transactions', 'accounts', 'excluded', 'removed'],

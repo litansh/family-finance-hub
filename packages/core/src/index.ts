@@ -8,4 +8,5 @@ export * from './recommendations.ts';
 export * from './forecast.ts';
 export * from './budget.ts';
 export * from './strategy.ts';
+export * from './brief.ts';
 export * from './sample.ts';
