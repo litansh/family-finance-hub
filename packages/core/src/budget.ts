@@ -69,7 +69,7 @@ export function freeToSpend(status: MonthStatus): FreeToSpend {
 
 // ---- Next month ----------------------------------------------------------------
 
-export interface NextMonthLine { label: string; amount: number; note?: string; count?: number }
+export interface NextMonthLine { label: string; amount: number; note?: string }
 
 // An installment plan whose last payment falls in the viewed month.
 // `shareOfAverage`: how much of it sits inside the closed-month average the variable forecast is built on.
@@ -132,7 +132,7 @@ export function nextMonth(i: NextMonthInputs): NextMonth {
   // paid this month, and a charge RiseUp keeps expecting that never comes.
   const endsNow = [...(i.endingNow ?? []).filter((p) => p.fixed)];
   const charges = status.envelopes.filter((e) => e.kind === 'fixed');
-  const merged = new Map<string, NextMonthLine>();
+  const fixedLines: NextMonthLine[] = [];
   const ending: NextMonthLine[] = [];
   const doubtful: NextMonthLine[] = [];
   for (const e of charges) {
@@ -141,12 +141,11 @@ export function nextMonth(i: NextMonthInputs): NextMonth {
     const at = e.paid ? endsNow.findIndex((p) => p.businessName === e.label && Math.abs(p.amount - amount) < 1) : -1;
     if (at >= 0) { endsNow.splice(at, 1); ending.push({ label: e.label, amount }); continue; }
     if (!e.paid && (e.pendingMonths ?? 0) >= 1) { doubtful.push({ label: e.maybe ? `כנראה ${e.maybe.join(' או ')}` : e.label, amount }); continue; }
-    // Several charges under one name (four app-store subscriptions) read better as one line.
-    const line = merged.get(e.label);
-    if (line) { line.amount += amount; line.count = (line.count ?? 1) + 1; }
-    else merged.set(e.label, { label: e.label, amount, note: e.guessed ? 'שם משוער' : undefined });
+    // Charges that share a name stay separate lines: four app-store subscriptions
+    // are four charges, each of which can change or be cancelled on its own.
+    fixedLines.push({ label: e.label, amount, note: e.guessed ? 'שם משוער' : undefined });
   }
-  const fixedLines = [...merged.values()].sort((a, b) => b.amount - a.amount);
+  fixedLines.sort((a, b) => b.amount - a.amount);
 
   // Variable spending, per category, from the last three closed months.
   const closed = [...new Set(history.filter((h) => h.m < status.month).map((h) => h.m))].sort().slice(-3);

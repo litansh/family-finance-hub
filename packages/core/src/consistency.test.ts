@@ -53,6 +53,9 @@ for (const variant of ['comfortable', 'tight'] as const) {
       // what is set aside as ending or doubtful is not also counted
       const shown = d.nextMonth.fixed.lines.reduce((x, l) => x + l.amount, 0);
       expect(shown).toBeCloseTo(d.nextMonth.fixed.total);
+      // one line per charge: nothing is folded together because it shares a name
+      const repeating = st.envelopes.filter((e) => e.kind === 'fixed' && (e.paid ? e.actual : e.planned) > 0).length;
+      expect(d.nextMonth.fixed.lines.length + d.nextMonth.fixed.ending.length + d.nextMonth.fixed.doubtful.length).toBe(repeating);
     });
 
     it('no installment plan appears twice', () => {
