@@ -122,7 +122,9 @@ async function apiKey(): Promise<string> {
 export class NotConfigured extends Error {}
 
 const claude: Model = async ({ system, messages, tools }) => {
-  const client = new Anthropic({ apiKey: await apiKey(), timeout: 150_000, maxRetries: 1 });
+  // A key that is not scoped to a workspace must name one on every request.
+  const workspace = process.env.ANTHROPIC_WORKSPACE_ID;
+  const client = new Anthropic({ apiKey: await apiKey(), timeout: 150_000, maxRetries: 1, defaultHeaders: workspace ? { 'anthropic-workspace-id': workspace } : undefined });
   const final = await client.beta.messages.toolRunner({
     model: 'claude-opus-5',
     max_tokens: 16000,

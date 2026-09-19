@@ -64,3 +64,10 @@ variable "anthropic_api_key" {
   default     = ""
   sensitive   = true
 }
+
+variable "anthropic_workspace_id" {
+  description = "Optional. Only for an API key that is not scoped to a workspace: Anthropic then wants the workspace named on every request."
+  type        = string
+  default     = ""
+  sensitive   = true
+}

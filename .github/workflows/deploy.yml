@@ -35,6 +35,7 @@ jobs:
           RISEUP_PAT: ${{ secrets.RISEUP_PAT }}
           PAT_EXPIRES_AT: ${{ vars.PAT_EXPIRES_AT }}
           TF_VAR_anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          TF_VAR_anthropic_workspace_id: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
           TF_VAR_google_client_id: ${{ vars.GOOGLE_CLIENT_ID }}
           TF_VAR_google_client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           # Secrets rather than variables: variables are printed in the run log,

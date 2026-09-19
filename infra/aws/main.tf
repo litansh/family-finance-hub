@@ -203,6 +203,7 @@ resource "aws_lambda_function" "assistant" {
     variables = merge(
       { DATA_BUCKET = aws_s3_bucket.data.id, ANTHROPIC_KEY_PARAM = var.anthropic_key_param, ANTHROPIC_KEY_REGION = var.anthropic_key_region },
       var.anthropic_api_key == "" ? {} : { ANTHROPIC_API_KEY = var.anthropic_api_key },
+      var.anthropic_workspace_id == "" ? {} : { ANTHROPIC_WORKSPACE_ID = var.anthropic_workspace_id },
     )
   }
   depends_on = [aws_cloudwatch_log_group.lambda]
