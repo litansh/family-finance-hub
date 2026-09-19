@@ -1,4 +1,4 @@
-import { emptyPlan, loanPayment, maxDailySpend, simulate, type Dashboard, type PlanEvent } from '@hub/core';
+import { emptyPlan, EVERYDAY, loanPayment, maxDailySpend, simulate, spendCheck, type Dashboard, type PlanEvent } from '@hub/core';
 
 // What the assistant can look up. Plain functions over the same dashboard the
 // UI renders, so an answer can never disagree with the screen.
@@ -103,3 +103,38 @@ export function runForecast(d: Dashboard, q: ForecastInput) {
 }
 
 export const recommendations = (d: Dashboard) => d.recommendations.map((x) => ({ topic: x.topic, priority: x.priority, title: x.title, why: x.why, steps: x.steps, yearly_saving: x.yearlySaving ? r(x.yearlySaving) : null }));
+
+// What next month is expected to look like, from the same payload the screen shows.
+export function nextMonthView(d: Dashboard) {
+  const n = d.nextMonth;
+  return {
+    month: n.month, averages_taken_from: n.basisMonths,
+    expected_income: { total: r(n.income.total), lines: n.income.lines.map((l) => ({ name: l.label, amount: r(l.amount) })) },
+    fixed_charges: { total: r(n.fixed.total), largest: n.fixed.lines.slice(0, 12).map((l) => ({ name: l.label, amount: r(l.amount) })), ending_this_month: n.fixed.ending.map((l) => ({ name: l.label, amount: r(l.amount) })) },
+    variable_spending: { predicted_total: r(n.variable.total), by_category: n.variable.categories.slice(0, 20).map((c) => ({ category: c.label, predicted: r(c.predicted), budget: c.budget === undefined ? null : r(c.budget), last_months: c.lastMonths.map(r), trend: c.trend })) },
+    already_planned_by_the_family: n.planned.map((l) => ({ name: l.label, amount: r(l.amount) })),
+    expected_left_at_month_end: r(n.net), left_if_every_tracked_category_keeps_its_budget: r(n.ifOnBudget),
+    this_month_is_heading_to: r(n.carriedFromThisMonth),
+  };
+}
+
+// "Can we afford this, and out of which budget?" Deterministic; the model only
+// picks the category and explains the result.
+export function checkPurchase(d: Dashboard, q: { amount: number; category?: string }) {
+  const c = spendCheck(d.status, q, d.nextMonth.net);
+  const tracked = d.status.envelopes.filter((e) => e.kind === 'tracked');
+  return {
+    amount: r(c.amount),
+    charged_to: c.category === EVERYDAY ? 'everyday spending (no tracked category matched)' : c.category,
+    verdict: c.verdict,
+    month_as_a_whole_is_short: c.monthIsShort,
+    that_budget: c.categoryBudget && { budget: r(c.categoryBudget.planned), spent_so_far: r(c.categoryBudget.spent), left_before: r(c.categoryBudget.leftBefore), left_after: r(c.categoryBudget.leftAfter) },
+    whole_month: { left_before: r(c.month.leftBefore), left_after: r(c.month.leftAfter), per_day_before: r(c.month.perDayBefore), per_day_after: r(c.month.perDayAfter), days_left: c.month.daysLeft },
+    short_by_in_that_budget: r(c.shortfall),
+    budgets_with_room_to_give: c.sources.map((s) => ({ category: s.label, can_give: r(s.available) })),
+    suggested_shifts: c.suggestedShifts.map((s) => ({ from: s.from, to: s.to === EVERYDAY ? 'everyday' : s.to, amount: r(s.amount) })),
+    next_month_expected_left: r(d.nextMonth.net),
+    tracked_categories: tracked.map((e) => e.label),
+    shifts_already_made_this_month: d.shifts.map((s) => ({ from: s.from, to: s.to, amount: s.amount, reason: s.reason ?? null })),
+  };
+}

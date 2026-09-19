@@ -6,4 +6,5 @@ export * from './dashboard.ts';
 export * from './overlay.ts';
 export * from './recommendations.ts';
 export * from './forecast.ts';
+export * from './budget.ts';
 export * from './sample.ts';

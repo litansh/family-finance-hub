@@ -2,7 +2,7 @@ import { buildDashboard, sampleData } from '@hub/core';
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { handle, type ApiDeps } from './api.ts';
-import { overview, runForecast, searchTransactions } from './assistant-tools.ts';
+import { checkPurchase, nextMonthView, overview, runForecast, searchTransactions } from './assistant-tools.ts';
 import { handler as assistant, type AskJob, type Model } from './assistant.ts';
 import { keys, MemoryStore } from './store.ts';
 import { runSync } from './sync.ts';
@@ -17,6 +17,17 @@ describe('assistant tools', () => {
     expect(o.variable_expenses.left).toBe(Math.round(d.status.flexible.left));
     expect(o.fixed_expenses.total).toBe(Math.round(d.status.fixed.planned));
     expect(o.last_12_months).toHaveLength(12);
+  });
+
+  it('check a purchase against the same budgets the screen shows', () => {
+    const e = d.status.envelopes.filter((x) => x.kind === 'tracked').sort((x, y) => y.remaining - x.remaining)[0]!;
+    const c = checkPurchase(d, { amount: 10, category: e.label });
+    expect(c.charged_to).toBe(e.label);
+    expect(c.that_budget).toMatchObject({ budget: Math.round(e.planned), left_after: Math.round(e.remaining - 10) });
+    expect(c.whole_month.left_after).toBe(Math.round(d.status.flexible.left - 10));
+    expect(c.tracked_categories).toContain(e.label);
+    expect(checkPurchase(d, { amount: 1_000_000 })).toMatchObject({ verdict: 'over-budget', month_as_a_whole_is_short: true });
+    expect(nextMonthView(d).expected_left_at_month_end).toBe(Math.round(d.nextMonth.net));
   });
 
   it('never include what RiseUp keeps out of the cashflow', () => {
@@ -81,9 +92,18 @@ describe('ask flow', () => {
       expect(messages).toHaveLength(2); // the malformed history turn was dropped
       const search = tools.find((t) => t.name === 'search_transactions')!;
       const out = JSON.parse(await search.run({ text: 'וולט' } as never) as string);
+      // Budget only moves after an explicit approval, between real categories, and lands under user/.
+      const shiftTool = tools.find((t) => t.name === 'shift_budget')!;
+      const [from, to] = d.status.envelopes.filter((e) => e.kind === 'tracked').map((e) => e.label);
+      const run = async (i: object) => JSON.parse(await shiftTool.run(i as never) as string);
+      expect((await run({ from, to, amount: 50, user_approved_in_last_message: false })).error).toBeTruthy();
+      expect((await run({ from, to: 'לא קיים', amount: 50, user_approved_in_last_message: true })).error).toContain('Unknown category');
+      expect(store.data.has(keys.shifts)).toBe(false);
+      expect((await run({ from, to, amount: 50, reason: 'בדיקה', user_approved_in_last_message: true })).applied).toMatchObject({ from, to, amount: 50, by: 'alex@example.com' });
+      expect(store.data.has(keys.shifts)).toBe(true);
       return `הוצאתם ₪${out.total.toLocaleString()} על וולט ב־${out.matched} הזמנות.`;
     };
-    await assistant({ jobId: id }, { store, model });
+    await assistant({ jobId: id }, { store, model, now: () => new Date(`${TODAY}T10:00:00Z`) });
     const done = JSON.parse((await handle(ev('GET', '/api/ask', alex, undefined, { id }), deps) as { body: string }).body);
     expect(done.status).toBe('done');
     expect(done.answer).toMatch(/^הוצאתם ₪[\d,]+ על וולט ב־\d+ הזמנות\.$/);

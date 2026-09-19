@@ -170,6 +170,27 @@ describe('the hub keeps its own data', () => {
     expect((await put('/api/plans', { plans: 'nope' })).statusCode).toBe(400);
   });
 
+  it('moves budget between categories for both of us, keeps every shift, and undoes by adding one', async () => {
+    const before = await dashboard();
+    const month = before.status.month;
+    const [a, b] = before.status.envelopes.filter((e: { kind: string }) => e.kind === 'tracked') as { label: string; planned: number }[];
+    expect((await put('/api/shift', { month, from: a!.label, to: b!.label, amount: 120, reason: 'נעליים' }, 'noa@example.com')).statusCode).toBe(200);
+    const after = await dashboard('alex@example.com');
+    const planned = (d: typeof after, l: string) => d.status.envelopes.find((e: { kind: string; label: string }) => e.kind === 'tracked' && e.label === l).planned;
+    expect(planned(after, a!.label)).toBeCloseTo(a!.planned - 120);
+    expect(planned(after, b!.label)).toBeCloseTo(b!.planned + 120);
+    expect(after.shifts).toMatchObject([{ from: a!.label, to: b!.label, amount: 120, by: 'noa@example.com', reason: 'נעליים' }]);
+    expect(after.status.flexible.left).toBeCloseTo(before.status.flexible.left);
+
+    await put('/api/shift', { month, from: b!.label, to: a!.label, amount: 120 });
+    const undone = await dashboard();
+    expect(planned(undone, a!.label)).toBeCloseTo(a!.planned);
+    expect(undone.shifts).toHaveLength(2); // nothing is deleted
+
+    for (const bad of [{ month, from: a!.label, to: a!.label, amount: 5 }, { month, from: a!.label, to: b!.label, amount: 0 }, { month: '2026-9', from: a!.label, to: b!.label, amount: 5 }, { month, from: a!.label, to: b!.label, amount: 'lots' }])
+      expect((await put('/api/shift', bad)).statusCode).toBe(400);
+  });
+
   it('never lets a write touch RiseUp data or escape user/', async () => {
     const before = [...store.data.keys()].filter((k) => !k.startsWith('user/')).map((k) => [k, store.data.get(k)]);
     await put('/api/override', { transactionId: 'x', category: 'a' });

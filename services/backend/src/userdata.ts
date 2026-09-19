@@ -1,5 +1,5 @@
-import type { Overrides } from '@hub/core';
-import { createHash } from 'node:crypto';
+import { EVERYDAY, type BudgetShift, type Overrides, type Plan } from '@hub/core';
+import { createHash, randomBytes } from 'node:crypto';
 import { keys, type Store } from './store.ts';
 
 export type RecoStatus = 'open' | 'done' | 'dismissed' | 'snoozed';
@@ -15,13 +15,14 @@ const str = (v: unknown, max: number, name: string): string | undefined => {
 };
 
 export async function loadUserData(store: Store, email: string) {
-  const [overrides, reco, layout, plans] = await Promise.all([
+  const [overrides, reco, layout, plans, shifts] = await Promise.all([
     store.get<Overrides>(keys.overrides),
     store.get<RecoState>(keys.reco),
     store.get<unknown>(keys.layout(emailHash(email))),
-    store.get<unknown>(keys.plans),
+    store.get<{ plans?: Plan[] }>(keys.plans),
+    store.get<BudgetShift[]>(keys.shifts),
   ]);
-  return { overrides: overrides ?? {}, reco: reco ?? {}, layout: layout ?? null, plans: plans ?? null };
+  return { overrides: overrides ?? {}, reco: reco ?? {}, layout: layout ?? null, plans: plans ?? null, shifts: shifts ?? [] };
 }
 
 // Layout is personal: each of us arranges our own screens.
@@ -67,3 +68,22 @@ export async function savePlans(store: Store, email: string, body: unknown, now:
   if (!b || !Array.isArray(b.plans) || b.plans.length > 20 || JSON.stringify(b).length > 24_000) throw new BadRequest('plans must be a list of up to 20 plans');
   await store.put(keys.plans, { plans: b.plans, updatedBy: email, updatedAt: now });
 }
+
+// Moving budget between categories is shared, and append-only: a shift is never
+// edited or removed. To undo one, record the opposite shift.
+export async function saveShift(store: Store, email: string, body: unknown, now: string) {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const month = str(b.month, 7, 'month');
+  const from = str(b.from, 60, 'from');
+  const to = str(b.to, 60, 'to');
+  const amount = typeof b.amount === 'number' && Number.isFinite(b.amount) ? Math.round(b.amount) : NaN;
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) throw new BadRequest('month must be YYYY-MM');
+  if (!from || !to || from === to) throw new BadRequest('from and to must be two different budgets');
+  if (!(amount >= 1 && amount <= 1_000_000)) throw new BadRequest('amount must be between 1 and 1,000,000');
+  const all = (await store.get<BudgetShift[]>(keys.shifts)) ?? [];
+  if (all.length >= 5000) throw new BadRequest('too many shifts recorded');
+  const shift: BudgetShift = { id: randomBytes(8).toString('hex'), month, from, to, amount, reason: str(b.reason, 300, 'reason'), by: email, at: now };
+  await store.put(keys.shifts, [...all, shift]);
+  return shift;
+}
+export { EVERYDAY };

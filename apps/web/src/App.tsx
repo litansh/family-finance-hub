@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Icons, InfoProvider, Sheet, TermSheet } from './components/ui.tsx';
 import { Chat } from './chat.tsx';
 import { DetailSheet, type Detail } from './details.tsx';
-import { isSample, loadDashboard, localLayout, saveLayout, saveOverride, savePlans, saveReco, type HubData, type RecoStatus } from './lib/data.ts';
+import { isSample, loadDashboard, localLayout, saveLayout, saveOverride, savePlans, saveReco, saveShift, type HubData, type RecoStatus } from './lib/data.ts';
 import { ago, monthLabel } from './lib/format.ts';
 import { GLOSSARY, type TermId } from './lib/glossary.ts';
 import { DEFAULT_LAYOUT, hide, move, normalize, SCREEN_LABEL, SCREENS, sendTo, type Layout, type ScreenId } from './lib/layout.ts';
@@ -48,7 +48,7 @@ export function App() {
     catch (e) { say((e as Error).message); }
   };
 
-  const ctx: Ctx | undefined = useMemo(() => d && { d, theme, open: setDetail, openTxn: (t: ViewTransaction) => setDetail({ kind: 'txn', t }), setReco, go, savePlans: (plans) => { savePlans(plans).catch(() => say('התוכנית נשמרה במכשיר הזה בלבד')); } }, [d, theme]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ctx: Ctx | undefined = useMemo(() => d && { d, theme, open: setDetail, openTxn: (t: ViewTransaction) => setDetail({ kind: 'txn', t }), setReco, go, undoShift: async (s) => { try { await saveShift({ month: s.month, from: s.to, to: s.from, amount: s.amount, reason: 'ביטול העברה' }); await load(); say('ההעברה בוטלה'); } catch (e) { say((e as Error).message); } }, savePlans: (plans) => { savePlans(plans).catch(() => say('התוכנית נשמרה במכשיר הזה בלבד')); } }, [d, theme]); // eslint-disable-line react-hooks/exhaustive-deps
   const widgets = layout.screens[screen];
 
   return (
@@ -131,7 +131,7 @@ export function App() {
       </div>
 
       {d && !sheet && !detail && !term && !editing && <button className="fab" onClick={() => setSheet('chat')} aria-label="שאלו את העוזר הפיננסי">💬 <span>שאלו אותי</span></button>}
-      {sheet === 'chat' && d && <Chat month={d.status.month} onClose={() => setSheet(undefined)} />}
+      {sheet === 'chat' && d && <Chat month={d.status.month} onClose={() => { setSheet(undefined); void load(); }} />}
 
       {term && <TermSheet term={term} onClose={() => setTerm(undefined)} onGlossary={() => { setTerm(undefined); setSheet('glossary'); }} />}
 

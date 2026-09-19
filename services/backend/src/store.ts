@@ -18,6 +18,7 @@ export const keys = {
   overrides: 'user/overrides.json',
   reco: 'user/recommendations.json',
   plans: 'user/plans.json',
+  shifts: 'user/budget-shifts.json',
   chat: (jobId: string) => `user/chat/${jobId}.json`,
   layout: (emailHash: string) => `user/layout/${emailHash}.json`,
 };

@@ -11,10 +11,10 @@ export const SCREEN_LABEL: Record<ScreenId, string> = {
 export const DEFAULT_LAYOUT: Record<ScreenId, string[]> = {
   home: ['hero', 'kpis', 'pace', 'alerts', 'topRecos', 'split'],
   fixed: ['fixedKpis', 'income', 'fixed', 'changes', 'recurringAll'],
-  variable: ['variableKpis', 'budgets', 'everyday', 'biggest', 'installments'],
+  variable: ['variableKpis', 'budgets', 'shifts', 'everyday', 'biggest', 'installments'],
   txns: ['compare', 'transactions', 'accounts', 'excluded', 'removed'],
   trends: ['trendKpis', 'net', 'categories'],
-  recos: ['recoSummary', 'recoList', 'planner'],
+  recos: ['nextMonth', 'recoSummary', 'recoList', 'planner'],
 };
 
 export interface Layout { screens: Record<ScreenId, string[]>; hidden: string[] }

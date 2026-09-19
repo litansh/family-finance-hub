@@ -1,3 +1,4 @@
+import { shiftTotals, type BudgetShift } from './budget.ts';
 import type { Overrides, StoredTransaction } from './overlay.ts';
 import type { RiseupActual, RiseupBudget, RiseupEnvelope } from './riseup.ts';
 
@@ -28,6 +29,7 @@ export interface EnvelopeStatus {
   paid: boolean; // fixed items: has the charge/deposit happened
   guessed?: boolean; // label of a pending fixed item inferred from last month
   customPlan?: boolean; // the family set this amount in RiseUp themselves
+  riseupPlanned?: number; // RiseUp's own plan, when the family shifted budget in the hub
   weeks?: { index: number; until: string; planned: number; actual: number }[];
   items: EnvelopeItem[];
   raw: { ids: string[]; balancedAmount: (number | null)[]; originalAmount: (number | null | undefined)[]; balanceDate: (string | undefined)[] };
@@ -77,6 +79,8 @@ export interface StatusContext {
   categoryLabels?: Record<string, string>;
   // Last month's fixed charges, to put a probable name on a pending one.
   previousFixed?: { businessName: string; amount: number }[];
+  // Money the family moved between this month's budgets in the hub.
+  shifts?: BudgetShift[];
 }
 
 const plan = (e: RiseupEnvelope) => Math.abs(e.balancedAmount || e.originalAmount || 0);
@@ -141,12 +145,15 @@ export function buildEnvelopes(budget: RiseupBudget, ctx: StatusContext = {}): E
     landed.set(target, [...(landed.get(target) ?? []), x]);
   }
 
+  const shifted = shiftTotals(ctx.shifts ?? [], budget.budgetDate);
   for (const [cat, es] of groups) {
     const acts = landed.get(cat) ?? [];
+    const riseupPlanned = sum(es.map((e) => Math.abs(e.originalAmount || e.balancedAmount || 0)));
+    const delta = shifted.get(labelOfGroup.get(cat)!) ?? 0;
     const weekly = es.length > 1 || es[0]!.id.split('#').length > 3;
     out.push(finish({
       id: `${budget.budgetDate}#trackingCategory#${cat}`, kind: 'tracked', type: 'trackingCategory', isIncome: false, label: labelOfGroup.get(cat)!,
-      planned: sum(es.map((e) => Math.abs(e.originalAmount || e.balancedAmount || 0))), actual: sum(acts.map((x) => actualAmount(x.a))), paid: false,
+      planned: Math.max(riseupPlanned + delta, 0), riseupPlanned: delta ? riseupPlanned : undefined, actual: sum(acts.map((x) => actualAmount(x.a))), paid: false,
       customPlan: es.some((e) => e.isCustomPrediction),
       weeks: weekly ? es.map((e) => ({ index: Number(e.id.split('#')[3] ?? 0), until: (e.balanceDate ?? '').slice(0, 10), planned: Math.abs(e.originalAmount || 0), actual: sum(e.actuals.map(actualAmount)) })).sort((a, b) => a.index - b.index) : undefined,
       items: acts.map((x) => item(x.a)),

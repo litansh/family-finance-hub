@@ -1,4 +1,5 @@
-import { deriveBaseline, type Baseline } from './forecast.ts';
+import { nextMonth, type BudgetShift, type NextMonth } from './budget.ts';
+import { deriveBaseline, type Baseline, type Plan } from './forecast.ts';
 import { buildAlerts, businessKey, detectRecurring, type Alert, type Recurring } from './insights.ts';
 import { cleanCategory, monthStatus, type MonthStatus } from './month.ts';
 import { annotateWithBudget, applyOverrides, counts, installmentPlans, isFixed, type InstallmentPlan, type Overrides, type StoredTransaction, type ViewTransaction } from './overlay.ts';
@@ -31,6 +32,8 @@ export interface Dashboard {
   installments: InstallmentPlan[];
   recommendations: Recommendation[];
   baseline: Baseline; // what the planner starts from
+  nextMonth: NextMonth; // what the month after the viewed one is expected to look like
+  shifts: BudgetShift[]; // budget the family moved between categories this month
   categoryNames: string[];
   history: HistoryLine[];
   previous?: MonthTotals;
@@ -41,6 +44,8 @@ export interface DashboardInputs {
   budget: RiseupBudget;
   transactions: StoredTransaction[]; // every stored month
   overrides?: Overrides;
+  shifts?: BudgetShift[];
+  plan?: Plan; // the saved what-if plan, so next month includes what the family already expects
   categoryLabels?: Record<string, string>;
   today: string; // YYYY-MM-DD
   lastSyncAt: string | null;
@@ -86,6 +91,7 @@ export function buildDashboard(i: DashboardInputs): Dashboard {
   const status = monthStatus(i.budget, i.today, {
     transactions: monthAll,
     overrides,
+    shifts: i.shifts,
     categoryLabels: { ...learned, ...i.categoryLabels },
     previousFixed: history.filter((t) => t.cashflowDate === last && !t.isIncome && isFixed(t)).map((t) => ({ businessName: t.businessName, amount: t.amount })),
   });
@@ -93,6 +99,8 @@ export function buildDashboard(i: DashboardInputs): Dashboard {
   const totals = monthlyTotals(upTo);
   const installments = installmentPlans(upTo, month);
   const hoursSinceSync = i.lastSyncAt ? (Date.parse(`${i.today}T12:00:00Z`) - Date.parse(i.lastSyncAt)) / 3_600_000 : undefined;
+  const baseline = deriveBaseline(totals, status, installments);
+  const historyLines: HistoryLine[] = upTo.map((t) => ({ id: t.transactionId, k: t.commitmentId ?? businessKey(t.businessName), name: t.businessName, m: t.cashflowDate, d: t.transactionDate.slice(0, 10), a: t.amount, inc: t.isIncome, cat: t.categoryLabel ?? 'אחר', fixed: isFixed(t) }));
   const byDate = (a: ViewTransaction, b: ViewTransaction) => b.transactionDate.localeCompare(a.transactionDate);
 
   return {
@@ -110,9 +118,11 @@ export function buildDashboard(i: DashboardInputs): Dashboard {
     removed: monthAll.filter((t) => t.removedFromSourceAt).sort(byDate),
     installments,
     recommendations: buildRecommendations({ status, recurring, installments, months: totals, history: upTo }),
-    baseline: deriveBaseline(totals, status, installments),
+    baseline,
+    nextMonth: nextMonth({ status, baseline, installments, history: historyLines, plan: i.plan }),
+    shifts: (i.shifts ?? []).filter((s) => s.month === month),
     categoryNames: [...new Set(upTo.filter((t) => !t.isIncome).map((t) => t.categoryLabel ?? 'אחר'))].sort((a, b) => a.localeCompare(b, 'he')),
-    history: upTo.map((t) => ({ id: t.transactionId, k: t.commitmentId ?? businessKey(t.businessName), name: t.businessName, m: t.cashflowDate, d: t.transactionDate.slice(0, 10), a: t.amount, inc: t.isIncome, cat: t.categoryLabel ?? 'אחר', fixed: isFixed(t) })),
+    history: historyLines,
     previous: totals.filter((m) => m.month < month).at(-1),
     availableMonths: [...new Set(i.transactions.map((t) => t.cashflowDate))].sort().reverse(),
   };

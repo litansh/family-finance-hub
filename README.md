@@ -27,6 +27,13 @@ UI on your own domain, locked to the two to four people you list.
   is ever deleted.
 - **Recommendations** from fixed rules over your own data: a bill that crept up,
   loans worth consolidating, a subscription nobody uses.
+- **Next month, predicted.** Expected income, fixed charges (and which
+  installment plans end), and variable spending per category against its budget.
+- **"Can I buy this?"** Ask before spending. The assistant says which budget it
+  comes out of and what is left. If that budget is short, it offers to move money
+  from a category that is under budget, and does it only after you approve. If
+  nothing has room, it says so: only if it really matters. Shifts live in the
+  hub, are never deleted, and RiseUp itself is not changed.
 - **What-if planner.** A bonus, a raise, a new loan: see the months ahead and a
   safe daily spend.
 - **Ask in Hebrew** (optional). An assistant on Claude that answers only through

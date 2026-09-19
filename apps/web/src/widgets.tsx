@@ -1,4 +1,4 @@
-import type { EnvelopeStatus, Plan, Recommendation, Recurring, ViewTransaction } from '@hub/core';
+import { EVERYDAY, type BudgetShift, type EnvelopeStatus, type Plan, type Recommendation, type Recurring, type ViewTransaction } from '@hub/core';
 import { useMemo, useState, type ReactNode } from 'react';
 import { BurnChart, NetChart, SplitChart } from './components/charts.tsx';
 import { AlertList, Info, Section, Tile } from './components/ui.tsx';
@@ -15,6 +15,7 @@ export interface Ctx {
   openTxn: (t: ViewTransaction) => void;
   setReco: (id: string, status: RecoStatus) => void;
   savePlans: (plans: Plan[]) => void;
+  undoShift: (s: BudgetShift) => void;
   go: (screen: ScreenId) => void;
 }
 
@@ -34,6 +35,7 @@ function EnvelopeRow({ e, open }: { e: EnvelopeStatus; open: Ctx['open'] }) {
         <span>{e.remaining >= 0 ? `נשארו ${money(e.remaining)}` : `חריגה של ${money(-e.remaining)}`}</span>
         <span>{charges(e.count)}</span>
         {e.weeks && <span>מנוהל שבועית</span>}
+        {e.riseupPlanned !== undefined && <span>אחרי העברת תקציב · ברייזאפ <span className="num">{money(e.riseupPlanned)}</span></span>}
         {state !== 'ok' && <span className={`pill ${state === 'over' ? 'p1' : 'p2'}`}>{word}</span>}
       </div>
     </button>
@@ -169,6 +171,77 @@ function Budgets({ d, open }: Ctx) {
   return (
     <Section title="קטגוריות במעקב" term="envelope" hint={over ? plural(over, 'חריגה אחת', 'חריגות') : 'ללא חריגות'} note="הקטגוריות שהגדרתם להן תקציב ברייזאפ. לחיצה על קטגוריה מציגה את כל העסקאות שלה, החלוקה השבועית וההיסטוריה.">
       <div className="rows">{tracked.map((e) => <EnvelopeRow e={e} open={open} key={e.id} />)}</div>
+    </Section>
+  );
+}
+
+const budgetName = (l: string) => (l === EVERYDAY ? 'הוצאות שוטפות' : l);
+
+// Budget the family moved between categories this month, through the assistant.
+function Shifts({ d, undoShift }: Ctx) {
+  if (d.shifts.length === 0) return null;
+  return (
+    <Section title="העברות תקציב החודש" hint={plural(d.shifts.length, 'העברה אחת', 'העברות')} note="העברות בין תקציבים שאישרתם מול העוזר. הן נרשמות כאן בלבד: התקציב ברייזאפ עצמו לא משתנה. ביטול רושם העברה הפוכה, כך ששום דבר לא נמחק.">
+      <div className="rows">
+        {d.shifts.map((s) => (
+          <div className="row" key={s.id}>
+            <span className="name">{budgetName(s.from)} ← {budgetName(s.to)}</span>
+            <span className="amt">{money(s.amount)}</span>
+            <div className="meta">
+              {s.reason && <span>{s.reason}</span>}
+              <span>{shortDate(s.at)}</span>
+              <button type="button" className="link-btn" onClick={() => undoShift(s)}>ביטול</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+// The month after the one on screen: what is expected to come in, go out and be left.
+function NextMonthView({ d }: Ctx) {
+  const n = d.nextMonth;
+  const [all, setAll] = useState(false);
+  const cats = all ? n.variable.categories : n.variable.categories.slice(0, 6);
+  const arrow = { up: '↑ בעלייה', down: '↓ בירידה', flat: '' } as const;
+  return (
+    <Section title={`תחזית ל${monthLabel(n.month)}`} hint={<span className="num">{signedMoney(n.net)}</span>}
+      note={`הערכה בלבד. הכנסות וחיובים קבועים לפי מה שרייזאפ מצפה לו החודש; הוצאות משתנות לפי הממוצע של ${plural(n.basisMonths.length, 'החודש הסגור האחרון', 'החודשים הסגורים האחרונים')}. עסקאות בתשלומים שמסתיימות החודש כבר לא נספרות.`}>
+      <div className="tiles">
+        <Tile caption="צפוי להישאר" value={signedMoney(n.net)} sub={n.net < 0 ? 'החודש צפוי להסתיים במינוס' : 'החודש צפוי להסתיים בפלוס'} />
+        <Tile caption="אם עומדים בתקציבים" value={signedMoney(n.ifOnBudget)} sub="כל קטגוריה במעקב נשארת בתקציב שלה" />
+        <Tile caption="הכנסות צפויות" value={money(n.income.total)} />
+        <Tile caption="חיובים קבועים" value={money(n.fixed.total)} sub={n.fixed.ending.length ? `${plural(n.fixed.ending.length, 'חיוב אחד מסתיים', 'חיובים מסתיימים')} החודש` : undefined} />
+      </div>
+      {n.planned.length > 0 && (
+        <div className="rows">
+          {n.planned.map((l, i) => <div className="row" key={i}><span className="name">{l.label}</span><span className={`amt ${l.amount > 0 ? 'in' : ''}`}>{signedMoney(l.amount)}</span><div className="meta"><span>מתוך התוכנית שלכם ב"מה אם"</span></div></div>)}
+        </div>
+      )}
+      {n.fixed.ending.length > 0 && (
+        <div className="rows">
+          {n.fixed.ending.map((l, i) => <div className="row" key={i}><span className="name">{l.label}</span><span className="amt in">{money(l.amount)}</span><div className="meta"><span className="pill ok">מסתיים החודש, מתפנה מהחודש הבא</span></div></div>)}
+        </div>
+      )}
+      <h3 style={{ margin: '1rem 0 0.25rem' }}>הוצאות משתנות צפויות · <span className="num">{money(n.variable.total)}</span></h3>
+      <div className="rows">
+        {cats.map((c) => {
+          const over = c.budget !== undefined && c.budget > 0 && c.predicted > c.budget;
+          return (
+            <div className="row" key={c.label}>
+              <span className="name">{c.label}</span>
+              <span className="amt">{money(c.predicted)}{c.budget !== undefined && c.budget > 0 && <span style={{ color: 'var(--muted)', fontWeight: 500 }}> / {money(c.budget)}</span>}</span>
+              <div className="meta">
+                {over && <span className="pill p1">צפויה חריגה של {money(c.predicted - c.budget!)}</span>}
+                {arrow[c.trend] && <span>{arrow[c.trend]}</span>}
+                <span>חודשים אחרונים: <span className="num">{c.lastMonths.map((x) => money(x)).join(' · ')}</span></span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {n.variable.categories.length > 6 && <button className="more" onClick={() => setAll(!all)}>{all ? 'פחות' : `כל ${n.variable.categories.length} הקטגוריות`}</button>}
     </Section>
   );
 }
@@ -533,6 +606,8 @@ export const WIDGETS: Record<string, { name: string; render: (c: Ctx) => ReactNo
   variableKpis: { name: 'סיכום משתנות', render: (c) => <VariableKpis {...c} /> },
   pace: { name: 'קצב ההוצאות', render: (c) => <Pace {...c} /> },
   budgets: { name: 'קטגוריות במעקב', render: (c) => <Budgets {...c} /> },
+  shifts: { name: 'העברות תקציב', render: (c) => <Shifts {...c} /> },
+  nextMonth: { name: 'תחזית לחודש הבא', render: (c) => <NextMonthView {...c} /> },
   everyday: { name: 'הוצאות שוטפות', render: (c) => <Everyday {...c} /> },
   biggest: { name: 'הקניות הגדולות', render: (c) => <Biggest {...c} /> },
   installments: { name: 'עסקאות בתשלומים', render: (c) => <Installments {...c} /> },

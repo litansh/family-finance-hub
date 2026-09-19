@@ -1,4 +1,4 @@
-import { buildDashboard, sampleData, type Dashboard, type Overrides, type Plan } from '@hub/core';
+import { buildDashboard, sampleData, type BudgetShift, type Dashboard, type Overrides, type Plan } from '@hub/core';
 
 export type RecoStatus = 'open' | 'done' | 'dismissed' | 'snoozed';
 export type RecoState = Record<string, { status: RecoStatus; until?: string; updatedBy?: string; updatedAt?: string }>;
@@ -31,6 +31,8 @@ function sampleDashboard(month?: string): HubData {
   const d = buildDashboard({
     budget, transactions, today,
     overrides: local.get<Overrides>('sample-overrides', {}),
+    shifts: local.get<BudgetShift[]>('sample-shifts', []),
+    plan: local.get<{ plans: Plan[] } | null>('sample-plans', null)?.plans?.[0],
     lastSyncAt: new Date(Date.now() - 5 * 3_600_000).toISOString(),
     tokenExpiresInDays: 6,
     source: 'sample',
@@ -81,6 +83,14 @@ export async function saveReco(id: string, status: RecoStatus, until?: string) {
 export async function savePlans(plans: Plan[]) {
   if (!sampleMode) return put('/api/plans', { plans });
   local.set('sample-plans', { plans });
+}
+
+// Moves budget between two categories for one month, in the hub only. Shifts
+// are never edited or removed; undoing one records the opposite shift.
+export async function saveShift(s: { month: string; from: string; to: string; amount: number; reason?: string }) {
+  if (!sampleMode) return put('/api/shift', s);
+  const all = local.get<BudgetShift[]>('sample-shifts', []);
+  local.set('sample-shifts', [...all, { ...s, id: String(Date.now()), by: 'sample', at: new Date().toISOString() }]);
 }
 
 export interface ChatTurn { role: 'user' | 'assistant'; text: string }

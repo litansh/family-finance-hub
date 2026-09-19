@@ -69,8 +69,11 @@ The hub warns 7 days before expiry, and the sync-failure alarm emails
 ## The assistant ("שאלו אותי")
 
 Runs on Claude Opus 5 through the `<project>-assistant` Lambda. It
-answers only through four tools over the same dashboard the screen shows
-(overview, transaction search, forecast, recommendations). Questions and answers
+answers only through tools over the same dashboard the screen shows (overview,
+transaction search, forecast, next month, purchase check, recommendations). One
+tool writes: `shift_budget` moves budget between two categories for the current
+month, only after an explicit approval in the chat, into `user/budget-shifts.json`.
+That log is append-only, and RiseUp itself is never written to. Questions and answers
 are stored under `user/chat/` and are readable only by whoever asked.
 
 It needs an Anthropic API key (`sk-ant-api03-…`, from console.anthropic.com →
