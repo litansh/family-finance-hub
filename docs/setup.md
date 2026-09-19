@@ -145,6 +145,18 @@ decide who gets in.
 Open the hub in Safari → sign in → Share → Add to Home Screen. It opens
 full-screen, and the Access session lasts 30 days.
 
+## Pushing as the right person
+
+On a machine where `gh` has two accounts logged in, the active one can flip without
+notice. Enable the guard once, with your own values (nothing personal is kept in
+the repo); it then refuses a push made as anyone else:
+
+```bash
+git config core.hooksPath .githooks
+git config hooks.ghuser <your GitHub login>
+git config hooks.email  <the commit email this repository uses>
+```
+
 ## Local development
 
 ```bash

@@ -1,0 +1,35 @@
+#!/bin/sh
+# Refuse to push as the wrong person.
+#
+# On a machine where `gh` has two accounts logged in, the active one can flip
+# without notice. The loud symptom is "Repository not found". The dangerous
+# version is quieter: a push that SUCCEEDS under the wrong identity.
+#
+# Enable once, with your own values (nothing personal is kept in the repo):
+#   git config core.hooksPath .githooks
+#   git config hooks.ghuser  <github login that owns this repository>
+#   git config hooks.email   <commit email this repository uses>
+
+want=$(git config hooks.ghuser)
+want_email=$(git config hooks.email)
+[ -n "$want" ] || exit 0   # not configured: nothing to guard
+
+# No gh, or not logged in: not this hook's business. It guards identity, not
+# tooling, and a developer without gh should still be able to push.
+command -v gh >/dev/null 2>&1 || exit 0
+who=$(gh api user --jq .login 2>/dev/null) || exit 0
+[ -n "$who" ] || exit 0
+
+if [ "$who" != "$want" ]; then
+  echo "pre-push: refusing — gh is acting as '$who', not '$want'." >&2
+  echo "  Fix:  gh auth switch --user $want" >&2
+  exit 1
+fi
+
+[ -n "$want_email" ] || exit 0
+email=$(git config user.email)
+if [ "$email" != "$want_email" ]; then
+  echo "pre-push: refusing — commit email is '${email:-unset}', not '$want_email'." >&2
+  echo "  Fix:  git config user.email '$want_email'" >&2
+  exit 1
+fi
