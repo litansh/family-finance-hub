@@ -1,0 +1,29 @@
+name: Assistant check
+
+# Proves the assistant works end to end: the Anthropic key in SSM is readable,
+# the model answers, and it uses its tools. Runs on generated sample data.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.PROJECT_NAME }}-ci
+          aws-region: il-central-1
+      - name: Ask a sample question
+        env:
+          PROJECT_NAME: ${{ secrets.PROJECT_NAME }}
+        run: |
+          aws lambda invoke --function-name "$PROJECT_NAME-assistant" \
+            --cli-binary-format raw-in-base64-out --cli-read-timeout 200 \
+            --payload '{"selfTest":true}' out.json > meta.json
+          cat out.json; echo
+          if grep -q FunctionError meta.json; then echo "assistant failed" >&2; exit 1; fi

@@ -1,0 +1,32 @@
+{
+  "name": "@hub/backend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "bundle": "node build.mjs",
+    "sync:local": "tsx src/local.ts",
+    "api:local": "tsx src/dev-server.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.127.0",
+    "@aws-sdk/client-lambda": "^3.1136.0",
+    "@aws-sdk/client-s3": "^3.650.0",
+    "@aws-sdk/client-ssm": "^3.650.0",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@riseup-oss/mcp": "0.3.0",
+    "@hub/core": "*",
+    "jose": "^5.9.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^22.7.0",
+    "esbuild": "^0.24.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

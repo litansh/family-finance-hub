@@ -1,0 +1,49 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One deploy at a time; a second push waits instead of racing the state lock.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # lets the job exchange its GitHub identity for AWS credentials
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production # the AWS role trusts only this environment, and it accepts only main
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.15.8, terraform_wrapper: false }
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.PROJECT_NAME }}-ci
+          aws-region: il-central-1
+      - name: Build, apply, publish
+        run: scripts/deploy.sh
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RISEUP_PAT: ${{ secrets.RISEUP_PAT }}
+          PAT_EXPIRES_AT: ${{ vars.PAT_EXPIRES_AT }}
+          TF_VAR_anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          TF_VAR_google_client_id: ${{ vars.GOOGLE_CLIENT_ID }}
+          TF_VAR_google_client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          # Secrets rather than variables: variables are printed in the run log,
+          # and the run logs of a public repo are public.
+          PROJECT_NAME: ${{ secrets.PROJECT_NAME }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          HUB_DOMAIN: ${{ secrets.HUB_DOMAIN }}
+          ACCESS_TEAM_DOMAIN: ${{ secrets.ACCESS_TEAM_DOMAIN }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          TF_VAR_allowed_emails: ${{ secrets.ALLOWED_EMAILS }}
+          TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}

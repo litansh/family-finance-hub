@@ -1,0 +1,30 @@
+# secrets — the RiseUp PAT must never be committed
+.env
+.env.*
+!.env.example
+*.pem
+
+# node
+node_modules/
+dist/
+.wrangler/
+
+# terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!example.tfvars
+
+.DS_Store
+
+# real financial data pulled by the local sync — never commit
+data/
+
+# terraform lock is committed; provider cache is not
+infra/.terraform/
+services/backend/dist/
+
+# local plans and stack-local tfvars
+infra/*/.terraform/
+tfplan

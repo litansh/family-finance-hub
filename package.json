@@ -1,0 +1,19 @@
+{
+  "name": "family-finance-hub",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "services/*"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev": "npm run dev -w @hub/web",
+    "build": "npm run build -w @hub/web"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

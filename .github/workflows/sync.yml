@@ -1,0 +1,36 @@
+name: Sync now
+
+# Runs the RiseUp sync on demand, e.g. a history backfill after storing a new
+# token. The scheduled sync (06:00 and 18:00 Israel time) does not need this.
+on:
+  workflow_dispatch:
+    inputs:
+      months_back:
+        description: How many months before the current one to pull
+        default: "1"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.PROJECT_NAME }}-ci
+          aws-region: il-central-1
+      - name: Invoke sync
+        env:
+          MONTHS: ${{ inputs.months_back }}
+          PROJECT_NAME: ${{ secrets.PROJECT_NAME }}
+        run: |
+          case "$MONTHS" in ''|*[!0-9]*) echo "months_back must be a number" >&2; exit 1 ;; esac
+          aws lambda invoke --function-name "$PROJECT_NAME-sync" \
+            --cli-binary-format raw-in-base64-out --cli-read-timeout 150 \
+            --payload "{\"monthsBack\":$MONTHS}" out.json > meta.json
+          # The function returns month keys only, never amounts or names.
+          cat out.json; echo
+          if grep -q FunctionError meta.json; then echo "sync failed" >&2; exit 1; fi

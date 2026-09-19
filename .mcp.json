@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "riseup": {
+      "command": "npx",
+      "args": ["-y", "@riseup-oss/mcp"],
+      "env": {
+        "RISEUP_PAT": "${RISEUP_PAT}"
+      }
+    }
+  }
+}

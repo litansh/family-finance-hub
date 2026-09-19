@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main] # main is covered by the deploy workflow
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run bundle -w @hub/backend
+      - run: npm run build -w @hub/web
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.15.8, terraform_wrapper: false }
+      - name: Terraform fmt and validate
+        run: |
+          terraform fmt -check -recursive infra
+          for stack in bootstrap aws cloudflare; do
+            terraform -chdir=infra/$stack init -backend=false -input=false >/dev/null
+            terraform -chdir=infra/$stack validate
+          done
