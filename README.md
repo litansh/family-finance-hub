@@ -27,6 +27,14 @@ UI on your own domain, locked to the two to four people you list.
   is ever deleted.
 - **Recommendations** from fixed rules over your own data: a bill that crept up,
   loans worth consolidating, a subscription nobody uses.
+- **What is really free.** Some "variable" categories are fixed in all but name:
+  groceries, the pharmacy. Commit to a monthly amount for one and it becomes that
+  category's budget in the hub, set aside next to the fixed charges, so the last
+  line shows what is left for everything else.
+- **Pending fixed charges get a name.** RiseUp's API names a fixed charge only
+  once it has been charged. Until then the hub infers it from recent months by
+  amount and expected day, says when it is unsure, and flags a charge that has
+  been expected for months and never came.
 - **Next month, predicted.** Expected income, fixed charges (and which
   installment plans end), and variable spending per category against its budget.
 - **"Can I buy this?"** Ask before spending. The assistant says which budget it

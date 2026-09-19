@@ -19,6 +19,7 @@ export const keys = {
   reco: 'user/recommendations.json',
   plans: 'user/plans.json',
   shifts: 'user/budget-shifts.json',
+  commitments: 'user/commitments.json',
   chat: (jobId: string) => `user/chat/${jobId}.json`,
   layout: (emailHash: string) => `user/layout/${emailHash}.json`,
 };

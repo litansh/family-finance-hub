@@ -119,7 +119,9 @@ export function DetailSheet({ detail, d, open, onClose, editor }: { detail: Deta
           <dt>{e.isIncome ? 'התקבל בפועל' : 'יצא בפועל'}</dt><dd><span className="num">{moneyExact(e.actual)}</span></dd>
           {e.kind === 'tracked' && <><dt>{e.remaining >= 0 ? 'נשאר' : 'חריגה'}</dt><dd><span className="num">{moneyExact(Math.abs(e.remaining))}</span> ({pct(Math.min(e.usedPct, 9.99))} נוצלו)</dd></>}
           {(e.kind === 'fixed' || e.kind === 'income') && <><dt>מצב</dt><dd>{e.paid ? (e.isIncome ? 'התקבל החודש' : 'שולם החודש') : 'עדיין לא הגיע החודש'}</dd></>}
-          {e.guessed && <><dt>שימו לב</dt><dd>רייזאפ לא מוסר שם לחיוב שעוד לא ירד. השם זוהה לפי חיוב בסכום זהה בחודש שעבר.</dd></>}
+          {e.guessed && <><dt>שימו לב</dt><dd>רייזאפ לא מוסר שם לחיוב שעוד לא ירד. השם זוהה לפי חיוב קבוע בסכום דומה בשלושת החודשים האחרונים.</dd></>}
+          {!e.paid && !e.guessed && !e.isIncome && <><dt>למה אין שם?</dt><dd>המידע לא חסר אצלכם ברייזאפ. הממשק שרייזאפ פותח למרכז הכספים מוסר לחיוב קבוע שעוד לא ירד רק סכום ותאריך צפוי; השם מגיע ברגע שהחיוב יורד בפועל.{e.maybe ? ` לפי הסכום, זה כנראה ${e.maybe.join(' או ')}.` : ''}</dd></>}
+          {!!e.pendingMonths && <><dt>כדאי לבדוק</dt><dd>רייזאפ מצפה לחיוב בסכום הזה כבר {e.pendingMonths + 1} חודשים והוא לא ירד. אם ביטלתם אותו, אפשר להסיר אותו מההוצאות הקבועות באפליקציית רייזאפ, ואז הסכום הפנוי שלכם יגדל בהתאם.</dd></>}
           <dt>מספר עסקאות החודש</dt><dd>{e.items.length}</dd>
         </dl>
         {e.kind === 'everyday' && <p className="explain">להוצאות השוטפות אין תקציב ברייזאפ. מה ש"מותר" כאן הוא מה שנשאר מההכנסה אחרי הקבועות והקטגוריות במעקב: <b className="num">{money(e.planned)}</b>.</p>}

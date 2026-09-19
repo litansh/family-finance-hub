@@ -1,4 +1,4 @@
-import { shiftTotals, type BudgetShift } from './budget.ts';
+import { shiftTotals, type BudgetShift, type Commitments } from './budget.ts';
 import type { Overrides, StoredTransaction } from './overlay.ts';
 import type { RiseupActual, RiseupBudget, RiseupEnvelope } from './riseup.ts';
 
@@ -27,9 +27,13 @@ export interface EnvelopeStatus {
   usedPct: number;
   count: number;
   paid: boolean; // fixed items: has the charge/deposit happened
-  guessed?: boolean; // label of a pending fixed item inferred from last month
+  guessed?: boolean; // label of a pending fixed item inferred from recent months
+  maybe?: string[]; // several recent charges fit a pending item equally well
+  due?: string; // YYYY-MM-DD RiseUp expects a pending item on, when it says
+  pendingMonths?: number; // a pending charge of this amount was already expected, and never came, this many months running
   customPlan?: boolean; // the family set this amount in RiseUp themselves
-  riseupPlanned?: number; // RiseUp's own plan, when the family shifted budget in the hub
+  riseupPlanned?: number; // RiseUp's own plan, when the hub's differs (a commitment or a shift)
+  committed?: boolean; // the family committed to a monthly amount for this category
   weeks?: { index: number; until: string; planned: number; actual: number }[];
   items: EnvelopeItem[];
   raw: { ids: string[]; balancedAmount: (number | null)[]; originalAmount: (number | null | undefined)[]; balanceDate: (string | undefined)[] };
@@ -78,9 +82,16 @@ export interface StatusContext {
   // category with no spending yet this month.
   categoryLabels?: Record<string, string>;
   // Last month's fixed charges, to put a probable name on a pending one.
-  previousFixed?: { businessName: string; amount: number }[];
+  // Fixed charges of the last few months, to put a probable name on a pending
+  // one: RiseUp's API names a fixed charge only once it has been charged, and
+  // its envelope ids change every month, so amount and day are all there is.
+  previousFixed?: { businessName: string; amount: number; day?: number }[];
+  // Amounts of fixed charges that were expected and never came, per earlier month (newest first).
+  previousUnpaid?: number[][];
   // Money the family moved between this month's budgets in the hub.
   shifts?: BudgetShift[];
+  // Monthly amounts the family committed to, per tracked category label.
+  commitments?: Commitments;
 }
 
 const plan = (e: RiseupEnvelope) => Math.abs(e.balancedAmount || e.originalAmount || 0);
@@ -102,6 +113,19 @@ export function buildEnvelopes(budget: RiseupBudget, ctx: StatusContext = {}): E
 
   const paidNames = new Set(fixed.flatMap((e) => e.actuals.map((a) => a.businessName)));
   const candidates = (ctx.previousFixed ?? []).filter((p) => !paidNames.has(p.businessName));
+  const close = (a: number, b: number) => Math.abs(a - b) <= Math.max(1, b * 0.03);
+  // Names that fit a pending amount, best first: the expected day breaks ties.
+  const namesFor = (planned: number, day?: number): string[] => {
+    const score = new Map<string, number>();
+    for (const p of candidates) {
+      if (!close(p.amount, planned)) continue;
+      const dayGap = day && p.day ? Math.min(Math.abs(p.day - day), 31 - Math.abs(p.day - day)) : 15;
+      const s = Math.abs(p.amount - planned) / Math.max(planned, 1) + dayGap / 100;
+      score.set(p.businessName, Math.min(score.get(p.businessName) ?? Infinity, s));
+    }
+    return [...score.entries()].sort((a, b) => a[1] - b[1]).map(([n]) => n);
+  };
+  const taken = new Set<string>();
 
   for (const e of fixed) {
     const a = e.actuals[0];
@@ -109,12 +133,17 @@ export function buildEnvelopes(budget: RiseupBudget, ctx: StatusContext = {}): E
     const planned = plan(e);
     let label = a?.businessName;
     let guessed = false;
+    let maybe: string[] | undefined;
+    const due = !a && /^\d{4}-\d{2}-\d{2}/.test(e.balanceDate ?? '') ? e.balanceDate!.slice(0, 10) : undefined;
     if (!label && !isIncome) {
-      const near = candidates.filter((p) => Math.abs(p.amount - planned) <= Math.max(1, planned * 0.03));
-      if (near.length === 1) { label = near[0]!.businessName; guessed = true; }
+      const names = namesFor(planned, due ? Number(due.slice(8, 10)) : undefined).filter((n) => !taken.has(n));
+      if (names.length === 1) { label = names[0]!; guessed = true; taken.add(label); }
+      else if (names.length > 1) maybe = names.slice(0, 3);
     }
+    let pendingMonths = 0;
+    if (!a && !isIncome) for (const month of ctx.previousUnpaid ?? []) { if (month.some((x) => close(x, planned))) pendingMonths++; else break; }
     out.push(finish({
-      id: e.id, kind: isIncome ? 'income' : 'fixed', type: e.type, isIncome, label: label ?? (isIncome ? 'הכנסה קבועה צפויה' : 'חיוב קבוע צפוי'), guessed,
+      id: e.id, kind: isIncome ? 'income' : 'fixed', type: e.type, isIncome, label: label ?? (isIncome ? 'הכנסה קבועה צפויה' : 'חיוב קבוע צפוי'), guessed, maybe, due, pendingMonths: pendingMonths || undefined,
       planned, actual: sum(e.actuals.map(actualAmount)), paid: e.actuals.length > 0, items: e.actuals.map(item),
       raw: { ids: [e.id], balancedAmount: [e.balancedAmount], originalAmount: [e.originalAmount], balanceDate: [e.balanceDate] },
     }));
@@ -150,10 +179,12 @@ export function buildEnvelopes(budget: RiseupBudget, ctx: StatusContext = {}): E
     const acts = landed.get(cat) ?? [];
     const riseupPlanned = sum(es.map((e) => Math.abs(e.originalAmount || e.balancedAmount || 0)));
     const delta = shifted.get(labelOfGroup.get(cat)!) ?? 0;
+    const commitment = ctx.commitments?.[labelOfGroup.get(cat)!];
+    const base = commitment ?? riseupPlanned;
     const weekly = es.length > 1 || es[0]!.id.split('#').length > 3;
     out.push(finish({
       id: `${budget.budgetDate}#trackingCategory#${cat}`, kind: 'tracked', type: 'trackingCategory', isIncome: false, label: labelOfGroup.get(cat)!,
-      planned: Math.max(riseupPlanned + delta, 0), riseupPlanned: delta ? riseupPlanned : undefined, actual: sum(acts.map((x) => actualAmount(x.a))), paid: false,
+      planned: Math.max(base + delta, 0), riseupPlanned: delta || commitment !== undefined ? riseupPlanned : undefined, committed: commitment !== undefined || undefined, actual: sum(acts.map((x) => actualAmount(x.a))), paid: false,
       customPlan: es.some((e) => e.isCustomPrediction),
       weeks: weekly ? es.map((e) => ({ index: Number(e.id.split('#')[3] ?? 0), until: (e.balanceDate ?? '').slice(0, 10), planned: Math.abs(e.originalAmount || 0), actual: sum(e.actuals.map(actualAmount)) })).sort((a, b) => a.index - b.index) : undefined,
       items: acts.map((x) => item(x.a)),

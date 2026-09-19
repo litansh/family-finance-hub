@@ -2,6 +2,8 @@ import type { Baseline, Plan } from './forecast.ts';
 import type { EnvelopeStatus, MonthStatus } from './month.ts';
 import type { InstallmentPlan } from './overlay.ts';
 
+const sum = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
+
 // ---- Budget shifts -----------------------------------------------------------
 // RiseUp's API is read-only, so moving money between this month's budgets
 // happens here, on top of RiseUp's plan. A shift is a line in a log: nothing is
@@ -30,6 +32,37 @@ export function shiftTotals(shifts: BudgetShift[], month: string): Map<string, n
     if (s.to !== EVERYDAY) out.set(s.to, (out.get(s.to) ?? 0) + s.amount);
   }
   return out;
+}
+
+// ---- Commitments -----------------------------------------------------------------
+// Some variable categories are fixed in all but name: groceries, the pharmacy.
+// The family names a monthly amount for one and commits to it. From then on it
+// is that category's budget in the hub, and it is set aside before anything is
+// called free. RiseUp's own budget for the category is kept next to it.
+
+export type Commitments = Record<string, number>; // tracked category label → ILS per month
+
+export interface FreeToSpend {
+  income: number;
+  fixed: number;
+  goals: number;
+  committed: { label: string; amount: number; spent: number; counted: number; riseupBudget?: number }[];
+  committedTotal: number; // what is set aside for them: the commitment, or what was spent when that is more
+  freeForRest: number; // income − fixed − goals − committed: all other variable spending lives here
+  restSpent: number; // variable spending outside the committed categories
+  restLeft: number;
+  restLeftPerDay: number;
+}
+
+export function freeToSpend(status: MonthStatus): FreeToSpend {
+  const committed = status.envelopes.filter((e) => e.kind === 'tracked' && e.committed).map((e) => ({ label: e.label, amount: e.planned, spent: e.actual, counted: Math.max(e.planned, e.actual), riseupBudget: e.riseupPlanned }));
+  const committedTotal = sum(committed.map((c) => c.counted));
+  const income = status.income.expected, fixed = status.fixed.planned, goals = status.goals.planned;
+  const freeForRest = income - fixed - goals - committedTotal;
+  const restSpent = status.flexible.spent - sum(committed.map((c) => c.spent));
+  const restLeft = freeForRest - restSpent;
+  const days = Math.max(status.daysLeft + (status.dayOfMonth > 0 && status.daysLeft >= 0 && status.dayOfMonth <= status.daysInMonth ? 1 : 0), 1);
+  return { income, fixed, goals, committed, committedTotal, freeForRest, restSpent, restLeft, restLeftPerDay: restLeft / days };
 }
 
 // ---- Next month ----------------------------------------------------------------
@@ -71,8 +104,6 @@ export const addMonth = (month: string, n: number) => {
   const d = new Date(Date.UTC(y, m - 1 + n, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 };
-
-const sum = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
 
 export function nextMonth(i: NextMonthInputs): NextMonth {
   const { status, baseline, installments, history } = i;

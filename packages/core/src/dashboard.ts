@@ -1,4 +1,4 @@
-import { nextMonth, type BudgetShift, type NextMonth } from './budget.ts';
+import { freeToSpend, nextMonth, type BudgetShift, type Commitments, type FreeToSpend, type NextMonth } from './budget.ts';
 import { deriveBaseline, type Baseline, type Plan } from './forecast.ts';
 import { buildAlerts, businessKey, detectRecurring, type Alert, type Recurring } from './insights.ts';
 import { cleanCategory, monthStatus, type MonthStatus } from './month.ts';
@@ -34,6 +34,7 @@ export interface Dashboard {
   baseline: Baseline; // what the planner starts from
   nextMonth: NextMonth; // what the month after the viewed one is expected to look like
   shifts: BudgetShift[]; // budget the family moved between categories this month
+  free: FreeToSpend; // what is left for variable spending once fixed charges and commitments are set aside
   categoryNames: string[];
   history: HistoryLine[];
   previous?: MonthTotals;
@@ -42,9 +43,13 @@ export interface Dashboard {
 
 export interface DashboardInputs {
   budget: RiseupBudget;
+  // The months before it, newest first. Only used to notice a fixed charge that
+  // RiseUp keeps expecting and that never comes.
+  previousBudgets?: RiseupBudget[];
   transactions: StoredTransaction[]; // every stored month
   overrides?: Overrides;
   shifts?: BudgetShift[];
+  commitments?: Commitments;
   plan?: Plan; // the saved what-if plan, so next month includes what the family already expects
   categoryLabels?: Record<string, string>;
   today: string; // YYYY-MM-DD
@@ -92,8 +97,10 @@ export function buildDashboard(i: DashboardInputs): Dashboard {
     transactions: monthAll,
     overrides,
     shifts: i.shifts,
+    commitments: i.commitments,
     categoryLabels: { ...learned, ...i.categoryLabels },
-    previousFixed: history.filter((t) => t.cashflowDate === last && !t.isIncome && isFixed(t)).map((t) => ({ businessName: t.businessName, amount: t.amount })),
+    previousFixed: history.filter((t) => t.cashflowDate >= prevMonth(prevMonth(last)) && !t.isIncome && isFixed(t)).map((t) => ({ businessName: t.businessName, amount: t.amount, day: Number(t.transactionDate.slice(8, 10)) || undefined })),
+    previousUnpaid: (i.previousBudgets ?? []).map((b) => b.envelopes.filter((e) => e.type === 'fixed' && e.actuals.length === 0).map((e) => Math.abs(e.balancedAmount || e.originalAmount || 0))),
   });
   const recurring = detectRecurring(upTo, month);
   const totals = monthlyTotals(upTo);
@@ -121,6 +128,7 @@ export function buildDashboard(i: DashboardInputs): Dashboard {
     baseline,
     nextMonth: nextMonth({ status, baseline, installments, history: historyLines, plan: i.plan }),
     shifts: (i.shifts ?? []).filter((s) => s.month === month),
+    free: freeToSpend(status),
     categoryNames: [...new Set(upTo.filter((t) => !t.isIncome).map((t) => t.categoryLabel ?? 'אחר'))].sort((a, b) => a.localeCompare(b, 'he')),
     history: historyLines,
     previous: totals.filter((m) => m.month < month).at(-1),

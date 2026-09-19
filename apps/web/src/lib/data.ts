@@ -1,4 +1,4 @@
-import { buildDashboard, sampleData, type BudgetShift, type Dashboard, type Overrides, type Plan } from '@hub/core';
+import { buildDashboard, sampleData, type BudgetShift, type Commitments, type Dashboard, type Overrides, type Plan } from '@hub/core';
 
 export type RecoStatus = 'open' | 'done' | 'dismissed' | 'snoozed';
 export type RecoState = Record<string, { status: RecoStatus; until?: string; updatedBy?: string; updatedAt?: string }>;
@@ -32,6 +32,7 @@ function sampleDashboard(month?: string): HubData {
     budget, transactions, today,
     overrides: local.get<Overrides>('sample-overrides', {}),
     shifts: local.get<BudgetShift[]>('sample-shifts', []),
+    commitments: local.get<Commitments>('sample-commitments', {}),
     plan: local.get<{ plans: Plan[] } | null>('sample-plans', null)?.plans?.[0],
     lastSyncAt: new Date(Date.now() - 5 * 3_600_000).toISOString(),
     tokenExpiresInDays: 6,
@@ -91,6 +92,14 @@ export async function saveShift(s: { month: string; from: string; to: string; am
   if (!sampleMode) return put('/api/shift', s);
   const all = local.get<BudgetShift[]>('sample-shifts', []);
   local.set('sample-shifts', [...all, { ...s, id: String(Date.now()), by: 'sample', at: new Date().toISOString() }]);
+}
+
+// A monthly amount the family commits to for one category; null withdraws it.
+export async function saveCommitment(label: string, amount: number | null) {
+  if (!sampleMode) return put('/api/commitment', { label, amount });
+  const all = local.get<Commitments>('sample-commitments', {});
+  if (amount === null) delete all[label]; else all[label] = Math.round(amount);
+  local.set('sample-commitments', all);
 }
 
 export interface ChatTurn { role: 'user' | 'assistant'; text: string }

@@ -191,6 +191,19 @@ describe('the hub keeps its own data', () => {
       expect((await put('/api/shift', bad)).statusCode).toBe(400);
   });
 
+  it('lets either of us commit to a monthly amount for a category, and withdraw it', async () => {
+    const before = await dashboard();
+    const e = before.status.envelopes.find((x: { kind: string }) => x.kind === 'tracked') as { label: string; planned: number };
+    expect((await put('/api/commitment', { label: e.label, amount: 4321 }, 'noa@example.com')).statusCode).toBe(200);
+    const after = await dashboard('alex@example.com');
+    expect(after.status.envelopes.find((x: { label: string }) => x.label === e.label)).toMatchObject({ planned: 4321, committed: true });
+    expect(after.free.committed).toMatchObject([{ label: e.label, amount: 4321 }]);
+    expect((await put('/api/commitment', { label: e.label, amount: null })).statusCode).toBe(200);
+    expect((await dashboard()).free.committed).toEqual([]);
+    for (const bad of [{ amount: 5 }, { label: e.label, amount: -1 }, { label: e.label, amount: 'x' }, { label: 'x'.repeat(61), amount: 5 }])
+      expect((await put('/api/commitment', bad)).statusCode).toBe(400);
+  });
+
   it('never lets a write touch RiseUp data or escape user/', async () => {
     const before = [...store.data.keys()].filter((k) => !k.startsWith('user/')).map((k) => [k, store.data.get(k)]);
     await put('/api/override', { transactionId: 'x', category: 'a' });

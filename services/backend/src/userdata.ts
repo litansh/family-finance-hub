@@ -1,4 +1,4 @@
-import { EVERYDAY, type BudgetShift, type Overrides, type Plan } from '@hub/core';
+import { EVERYDAY, type BudgetShift, type Commitments, type Overrides, type Plan } from '@hub/core';
 import { createHash, randomBytes } from 'node:crypto';
 import { keys, type Store } from './store.ts';
 
@@ -15,14 +15,15 @@ const str = (v: unknown, max: number, name: string): string | undefined => {
 };
 
 export async function loadUserData(store: Store, email: string) {
-  const [overrides, reco, layout, plans, shifts] = await Promise.all([
+  const [overrides, reco, layout, plans, shifts, commitments] = await Promise.all([
     store.get<Overrides>(keys.overrides),
     store.get<RecoState>(keys.reco),
     store.get<unknown>(keys.layout(emailHash(email))),
     store.get<{ plans?: Plan[] }>(keys.plans),
     store.get<BudgetShift[]>(keys.shifts),
+    store.get<Commitments>(keys.commitments),
   ]);
-  return { overrides: overrides ?? {}, reco: reco ?? {}, layout: layout ?? null, plans: plans ?? null, shifts: shifts ?? [] };
+  return { overrides: overrides ?? {}, reco: reco ?? {}, layout: layout ?? null, plans: plans ?? null, shifts: shifts ?? [], commitments: commitments ?? {} };
 }
 
 // Layout is personal: each of us arranges our own screens.
@@ -87,3 +88,21 @@ export async function saveShift(store: Store, email: string, body: unknown, now:
   return shift;
 }
 export { EVERYDAY };
+
+// A monthly amount the family commits to for one category. Shared. Sending no
+// amount withdraws it; earlier values stay in the bucket's version history.
+export async function saveCommitment(store: Store, _email: string, body: unknown) {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const label = str(b.label, 60, 'label');
+  if (!label) throw new BadRequest('label is required');
+  const all = (await store.get<Commitments>(keys.commitments)) ?? {};
+  if (b.amount === null || b.amount === undefined || b.amount === '') delete all[label];
+  else {
+    const amount = typeof b.amount === 'number' && Number.isFinite(b.amount) ? Math.round(b.amount) : NaN;
+    if (!(amount >= 0 && amount <= 1_000_000)) throw new BadRequest('amount must be between 0 and 1,000,000');
+    if (Object.keys(all).length >= 60 && !(label in all)) throw new BadRequest('too many commitments');
+    all[label] = amount;
+  }
+  await store.put(keys.commitments, all);
+  return all;
+}

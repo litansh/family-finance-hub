@@ -80,8 +80,7 @@ It needs an Anthropic API key (`sk-ant-api03-…`, from console.anthropic.com �
 API keys):
 
 Create the key inside a workspace (Console → API keys → pick the workspace). A
-key that is not scoped to a workspace is rejected with a 400 unless you also set
-the `ANTHROPIC_WORKSPACE_ID` secret (`wrkspc_…`, from Console → Workspaces).
+key that is not scoped to a workspace is rejected with a 400.
 
 ```bash
 gh secret set ANTHROPIC_API_KEY --repo <owner>/<repo> --env production   # paste at the prompt

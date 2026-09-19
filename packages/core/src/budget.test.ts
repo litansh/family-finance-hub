@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { EVERYDAY, addMonth, shiftTotals, spendCheck, type BudgetShift } from './budget.ts';
+import { EVERYDAY, addMonth, shiftTotals, spendCheck, type BudgetShift, type Commitments } from './budget.ts';
+import { buildEnvelopes } from './month.ts';
+import type { RiseupBudget } from './riseup.ts';
 import { buildDashboard } from './dashboard.ts';
 import { sampleData } from './sample.ts';
 
@@ -95,5 +97,72 @@ describe('can I spend this?', () => {
     const offered = c.suggestedShifts.reduce((t, sh) => t + sh.amount, 0);
     expect(c.verdict).toBe(offered >= c.shortfall - 1 ? 'fits-with-shift' : 'over-budget');
     expect(c.suggestedShifts.every((sh) => sh.to === tight.label)).toBe(true);
+  });
+});
+
+describe('committed categories', () => {
+  const plain = build();
+  const e = plain.status.envelopes.filter((x) => x.kind === 'tracked')[0]!;
+  const withC = (c: Commitments) => buildDashboard({ budget: s.budgets.get(s.current)!, transactions: s.transactions, today, lastSyncAt: null, commitments: c });
+
+  it('without any, what is free is exactly what is left to spend', () => {
+    expect(plain.free.committed).toEqual([]);
+    expect(plain.free.restLeft).toBeCloseTo(plain.status.flexible.left);
+    expect(plain.free.freeForRest).toBeCloseTo(plain.status.flexible.planned);
+  });
+
+  it('the committed amount becomes the budget, RiseUp\'s stays visible, and it is set aside first', () => {
+    const amount = Math.round(e.actual) + 500; // more than was spent
+    const d = withC({ [e.label]: amount });
+    const env = d.status.envelopes.find((x) => x.kind === 'tracked' && x.label === e.label)!;
+    expect(env).toMatchObject({ planned: amount, committed: true });
+    expect(env.riseupPlanned).toBeCloseTo(e.planned);
+    expect(d.free.committed).toMatchObject([{ label: e.label, amount, counted: amount }]);
+    expect(d.free.freeForRest).toBeCloseTo(plain.status.flexible.planned - amount);
+    expect(d.free.restSpent).toBeCloseTo(plain.status.flexible.spent - e.actual);
+    // money committed and not yet spent is not free
+    expect(d.free.restLeft).toBeCloseTo(plain.status.flexible.left - (amount - e.actual));
+  });
+
+  it('an overrun eats into the rest, never hides', () => {
+    const d = withC({ [e.label]: 1 });
+    expect(d.free.committed[0]!.counted).toBeCloseTo(Math.max(e.actual, 1));
+    expect(d.free.restLeft).toBeCloseTo(plain.status.flexible.left - Math.max(1 - e.actual, 0));
+  });
+
+  it('a shift moves on top of the commitment', () => {
+    const other = plain.status.envelopes.filter((x) => x.kind === 'tracked')[1]!;
+    const d = buildDashboard({ budget: s.budgets.get(s.current)!, transactions: s.transactions, today, lastSyncAt: null, commitments: { [e.label]: 1000 }, shifts: [shift(other.label, e.label, 100)] });
+    expect(d.status.envelopes.find((x) => x.label === e.label)!.planned).toBe(1100);
+  });
+});
+
+describe('naming a fixed charge RiseUp has not named yet', () => {
+  const env = (id: string, amount: number, date?: string) => ({ id: `2026-09#fixed#${id}`, type: 'fixed' as const, balancedAmount: amount, originalAmount: amount, balanceDate: date, actuals: [] });
+  const paid = { id: '2026-09#fixed#p', type: 'fixed' as const, balancedAmount: 100, originalAmount: 100, actuals: [{ transactionId: 't', transactionDate: '2026-09-02', businessName: 'ארנונה', isIncome: false, billingAmount: 100, incomeAmount: null }] };
+  const budget = (es: RiseupBudget['envelopes']): RiseupBudget => ({ budgetDate: '2026-09', lastUpdatedAt: '', envelopes: [paid, ...es] });
+  const previousFixed = [{ businessName: 'חשמל', amount: 300, day: 12 }, { businessName: 'מים', amount: 62, day: 5 }, { businessName: 'גז', amount: 62.5, day: 28 }, { businessName: 'ארנונה', amount: 100, day: 2 }];
+
+  it('one fit gives a name; several give candidates, and the expected day breaks the tie', () => {
+    const [ , one, tie, byDay, none] = buildEnvelopes(budget([env('a', 300), env('b', 62), env('c', 62, '2026-09-28'), env('d', 999)]), { previousFixed });
+    expect(one).toMatchObject({ label: 'חשמל', guessed: true });
+    expect(tie!.maybe).toEqual(expect.arrayContaining(['מים', 'גז']));
+    expect(byDay!.maybe![0]).toBe('גז');
+    expect(byDay!.due).toBe('2026-09-28');
+    expect(none).toMatchObject({ label: 'חיוב קבוע צפוי', guessed: false });
+    expect(none!.maybe).toBeUndefined();
+  });
+
+  it('never offers a charge that was already paid this month, nor the same name twice', () => {
+    const [, a, b] = buildEnvelopes(budget([env('a', 100), env('b', 300), env('c', 300)]), { previousFixed });
+    expect(a!.label).toBe('חיוב קבוע צפוי'); // ארנונה is paid
+    expect(b!.label).toBe('חשמל');
+    expect(buildEnvelopes(budget([env('b', 300), env('c', 300)]), { previousFixed })[2]!.label).toBe('חיוב קבוע צפוי');
+  });
+
+  it('notices a charge that has been expected for months and never came', () => {
+    const [, x, y] = buildEnvelopes(budget([env('a', 25), env('b', 40)]), { previousUnpaid: [[25, 7], [25], [80]] });
+    expect(x!.pendingMonths).toBe(2);
+    expect(y!.pendingMonths).toBeUndefined();
   });
 });

@@ -16,6 +16,7 @@ export interface Ctx {
   setReco: (id: string, status: RecoStatus) => void;
   savePlans: (plans: Plan[]) => void;
   undoShift: (s: BudgetShift) => void;
+  setCommitment: (label: string, amount: number | null) => void;
   go: (screen: ScreenId) => void;
 }
 
@@ -35,7 +36,8 @@ function EnvelopeRow({ e, open }: { e: EnvelopeStatus; open: Ctx['open'] }) {
         <span>{e.remaining >= 0 ? `נשארו ${money(e.remaining)}` : `חריגה של ${money(-e.remaining)}`}</span>
         <span>{charges(e.count)}</span>
         {e.weeks && <span>מנוהל שבועית</span>}
-        {e.riseupPlanned !== undefined && <span>אחרי העברת תקציב · ברייזאפ <span className="num">{money(e.riseupPlanned)}</span></span>}
+        {e.committed && <span className="pill ok">התחייבות שלכם</span>}
+        {e.riseupPlanned !== undefined && <span>ברייזאפ: <span className="num">{money(e.riseupPlanned)}</span></span>}
         {state !== 'ok' && <span className={`pill ${state === 'over' ? 'p1' : 'p2'}`}>{word}</span>}
       </div>
     </button>
@@ -50,7 +52,10 @@ function FixedRow({ e, open }: { e: EnvelopeStatus; open: Ctx['open'] }) {
       <span className={`amt ${e.isIncome ? 'in' : ''}`}>{moneyExact(e.paid ? e.actual : e.planned)}</span>
       <div className="meta">
         <span className={`pill ${e.paid ? 'ok' : 'warn'}`}>{e.paid ? (e.isIncome ? 'התקבל' : 'שולם') : e.isIncome ? 'עדיין לא התקבל' : 'ממתין לחיוב'}</span>
-        {e.guessed && <span>שם משוער לפי החודש שעבר</span>}
+        {e.guessed && <span>שם משוער לפי חיוב דומה בחודשים האחרונים</span>}
+        {e.maybe && <span>כנראה: {e.maybe.join(' או ')}</span>}
+        {!e.paid && e.due && <span>צפוי ב־{shortDate(e.due)}</span>}
+        {!!e.pendingMonths && <span className="pill p2">לא ירד כבר {plural(e.pendingMonths + 1, 'חודש', 'חודשים')}. אולי בוטל?</span>}
         {e.paid && Math.abs(e.actual - e.planned) > Math.max(2, e.planned * 0.03) && <span>הסכום הצפוי היה <span className="num">{moneyExact(e.planned)}</span></span>}
       </div>
     </button>
@@ -172,6 +177,62 @@ function Budgets({ d, open }: Ctx) {
     <Section title="קטגוריות במעקב" term="envelope" hint={over ? plural(over, 'חריגה אחת', 'חריגות') : 'ללא חריגות'} note="הקטגוריות שהגדרתם להן תקציב ברייזאפ. לחיצה על קטגוריה מציגה את כל העסקאות שלה, החלוקה השבועית וההיסטוריה.">
       <div className="rows">{tracked.map((e) => <EnvelopeRow e={e} open={open} key={e.id} />)}</div>
     </Section>
+  );
+}
+
+// Fixed charges, then the categories the family treats as fixed in all but name,
+// then what is really left for everything else.
+function Free({ d, setCommitment, go }: Ctx) {
+  const f = d.free;
+  const [editing, setEditing] = useState(false);
+  const tracked = d.status.envelopes.filter((e) => e.kind === 'tracked');
+  const line = (label: ReactNode, value: ReactNode, meta?: ReactNode, strong = false, key?: string) => (
+    <div className="row" key={key}><span className="name" style={strong ? { fontWeight: 700 } : undefined}>{label}</span><span className="amt" style={strong ? { fontWeight: 700 } : undefined}>{value}</span>{meta && <div className="meta">{meta}</div>}</div>
+  );
+  return (
+    <Section title="כמה באמת פנוי" hint={<span className="num">{signedMoney(f.restLeft)}</span>}
+      note='יש הוצאות שרייזאפ מסווג כ"משתנות" אבל בפועל הן קבועות: סופר, פארמה. בחרו קטגוריה, תנו לה סכום חודשי והתחייבו אליו. מאותו רגע זה התקציב שלה כאן, והוא מופרש מראש, כך שהשורה האחרונה מראה מה נשאר באמת לכל שאר ההוצאות המשתנות.'>
+      <div className="rows">
+        {line('הכנסות צפויות', <span className="in">{money(f.income)}</span>)}
+        <button type="button" className="row tap" onClick={() => go('fixed')}><span className="name">פחות הוצאות קבועות</span><span className="amt">−{money(f.fixed)}</span><div className="meta"><span>שולם {money(d.status.fixed.paid)} · ממתין {money(d.status.fixed.pending)}</span></div></button>
+        {f.goals > 0 && line('פחות חיסכון ליעדים', <>−{money(f.goals)}</>)}
+        {f.committed.map((c) => line(`פחות ${c.label}`, <>−{money(c.counted)}</>, <>
+          <span>התחייבתם ל־<span className="num">{money(c.amount)}</span> · יצאו <span className="num">{money(c.spent)}</span></span>
+          {c.spent > c.amount && <span className="pill p1">חריגה של {money(c.spent - c.amount)}</span>}
+        </>, false, c.label))}
+        {line('פנוי לכל שאר ההוצאות המשתנות', signedMoney(f.freeForRest), undefined, true)}
+        {line('כבר יצא על שאר המשתנות', <>−{money(f.restSpent)}</>)}
+        {line(f.restLeft >= 0 ? 'נשאר' : 'חריגה', <span className={`delta ${f.restLeft >= 0 ? 'good' : 'bad'}`}>{money(Math.abs(f.restLeft))}</span>, f.restLeft > 0 && d.status.daysLeft > 0 ? <span>בערך <span className="num">{money(f.restLeftPerDay)}</span> ליום</span> : undefined, true)}
+      </div>
+      {f.committed.length === 0 && !editing && <p className="explain">עוד לא התחייבתם לאף קטגוריה, ולכן המספרים כאן זהים ל"נשאר להוציא".</p>}
+      <button className="more" onClick={() => setEditing(!editing)}>{editing ? 'סיום' : 'בחירת קטגוריות והתחייבות לסכום'}</button>
+      {editing && (
+        <div className="rows">
+          {tracked.map((e) => <CommitRow key={e.label} e={e} onSave={(amount) => setCommitment(e.label, amount)} />)}
+          {tracked.length === 0 && <p className="explain">אין קטגוריות במעקב ברייזאפ. הגדירו קטגוריה במעקב באפליקציית רייזאפ והיא תופיע כאן.</p>}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function CommitRow({ e, onSave }: { e: EnvelopeStatus; onSave: (amount: number | null) => void }) {
+  const [value, setValue] = useState(e.committed ? String(Math.round(e.planned)) : '');
+  const n = Number(value);
+  const valid = value.trim() !== '' && Number.isFinite(n) && n >= 0;
+  const id = `commit-${e.id}`;
+  return (
+    <div className="row">
+      <label className="name" htmlFor={id}>{e.label}</label>
+      <span className="amt" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+        <input id={id} inputMode="numeric" dir="ltr" style={{ width: '6.5rem' }} value={value} placeholder={String(Math.round(e.riseupPlanned ?? e.planned))} onChange={(ev) => setValue(ev.target.value.replace(/[^\d.]/g, ''))} aria-label={`סכום חודשי ל${e.label}, בשקלים`} />
+        <button type="button" className="tool-btn primary" disabled={!valid} onClick={() => onSave(n)}>התחייבות</button>
+      </span>
+      <div className="meta">
+        <span>ברייזאפ: <span className="num">{money(e.riseupPlanned ?? e.planned)}</span> · יצאו החודש <span className="num">{money(e.actual)}</span></span>
+        {e.committed && <button type="button" className="link-btn" onClick={() => { setValue(''); onSave(null); }}>הסרת ההתחייבות</button>}
+      </div>
+    </div>
   );
 }
 
@@ -595,6 +656,7 @@ function RecoList(c: Ctx) {
 
 export const WIDGETS: Record<string, { name: string; render: (c: Ctx) => ReactNode }> = {
   hero: { name: 'נשאר להוציא', render: (c) => <Hero {...c} /> },
+  free: { name: 'כמה באמת פנוי', render: (c) => <Free {...c} /> },
   kpis: { name: 'מדדי החודש', render: (c) => <Kpis {...c} /> },
   alerts: { name: 'דורש תשומת לב', render: (c) => <Alerts {...c} /> },
   topRecos: { name: 'המלצות מובילות', render: (c) => <TopRecos {...c} /> },

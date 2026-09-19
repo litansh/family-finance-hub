@@ -15,7 +15,9 @@ export function overview(d: Dashboard) {
     fixed_expenses: { total: r(s.fixed.planned), already_charged: r(s.fixed.paid), still_pending: r(s.fixed.pending) },
     variable_expenses: { spent: r(s.flexible.spent), available_for_them: r(s.flexible.planned), left: r(s.flexible.left), left_per_day: r(s.leftPerDay) },
     projected_month_end: r(s.projectedNet),
-    tracked_categories: s.envelopes.filter((e) => e.kind === 'tracked').map((e) => ({ category: e.label, budget: r(e.planned), spent: r(e.actual) })),
+    tracked_categories: s.envelopes.filter((e) => e.kind === 'tracked').map((e) => ({ category: e.label, budget: r(e.planned), spent: r(e.actual), committed_by_the_family: !!e.committed, budget_in_riseup: e.riseupPlanned === undefined ? undefined : r(e.riseupPlanned) })),
+    // Categories the family treats as fixed in all but name (groceries, pharmacy): set aside before anything is called free.
+    after_fixed_and_commitments: { committed_total: r(d.free.committedTotal), free_for_all_other_variable_spending: r(d.free.freeForRest), spent_on_other_variable: r(d.free.restSpent), left_for_other_variable: r(d.free.restLeft), left_per_day: r(d.free.restLeftPerDay) },
     everyday_spending_without_category: r(s.flexible.everydaySpent),
     excluded_from_cashflow_by_riseup: s.excluded,
     last_12_months: d.months.map((m) => ({ month: m.month, income: r(m.income), fixed: r(m.fixed), variable: r(m.variable), net: r(m.net) })),

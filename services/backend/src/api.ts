@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { AccessDenied, verifyAccess, type AccessConfig } from './access.ts';
 import type { AskJob, ChatTurn } from './assistant.ts';
 import { emptyMeta, keys, S3Store, type Meta, type Store } from './store.ts';
-import { BadRequest, loadUserData, saveLayout, saveOverride, savePlans, saveShift, saveRecoStatus } from './userdata.ts';
+import { BadRequest, loadUserData, saveLayout, saveOverride, saveCommitment, savePlans, saveShift, saveRecoStatus } from './userdata.ts';
 
 const HISTORY_MONTHS = 13;
 
@@ -58,7 +58,7 @@ export async function handle(event: APIGatewayProxyEventV2, deps: ApiDeps): Prom
     }
   }
   if (method === 'PUT') {
-    const save = { '/api/layout': saveLayout, '/api/override': saveOverride, '/api/reco': saveRecoStatus, '/api/plans': savePlans, '/api/shift': saveShift }[path];
+    const save = { '/api/layout': saveLayout, '/api/override': saveOverride, '/api/reco': saveRecoStatus, '/api/plans': savePlans, '/api/shift': saveShift, '/api/commitment': saveCommitment }[path];
     if (!save) return json(404, { error: 'not found' });
     try {
       const raw = event.isBase64Encoded ? Buffer.from(event.body ?? '', 'base64').toString() : event.body ?? '';
@@ -104,7 +104,8 @@ export async function loadDashboard(store: Store, email: string, asked: string |
   const wanted = meta.months.filter((m) => m <= month).slice(0, HISTORY_MONTHS);
   const loaded = await Promise.all(wanted.map((m) => store.get<{ transactions: StoredTransaction[] }>(keys.transactions(m))));
   const user = await loadUserData(store, email);
-  const dashboard = buildDashboard({ budget, transactions: loaded.flatMap((r) => r?.transactions ?? []), overrides: user.overrides, shifts: user.shifts, plan: user.plans?.plans?.[0], today: now.toISOString().slice(0, 10), lastSyncAt: meta.lastSyncAt, tokenExpiresInDays });
+  const previousBudgets = (await Promise.all(meta.months.filter((m) => m < month).slice(0, 3).map((m) => store.get<RiseupBudget>(keys.budget(m))))).filter((b): b is RiseupBudget => !!b);
+  const dashboard = buildDashboard({ budget, previousBudgets, transactions: loaded.flatMap((r) => r?.transactions ?? []), overrides: user.overrides, shifts: user.shifts, commitments: user.commitments, plan: user.plans?.plans?.[0], today: now.toISOString().slice(0, 10), lastSyncAt: meta.lastSyncAt, tokenExpiresInDays });
   // Older months stay selectable even though only `wanted` was loaded.
   return { ...dashboard, availableMonths: meta.months, user: { email, layout: user.layout, reco: user.reco, plans: user.plans } };
 }
