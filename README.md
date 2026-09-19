@@ -1,14 +1,33 @@
+<p align="center"><img src="docs/banner.png" alt="Family Finance Hub: see where the month stands, ask before you spend, plan the way out of the minus" width="100%"></p>
+
+<p align="center">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0f231c">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-0f231c">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-112%20passing-0f231c">
+  <img alt="Serverless on AWS and Cloudflare" src="https://img.shields.io/badge/serverless-AWS%20%2B%20Cloudflare-0f231c">
+  <img alt="Assistant runs on Claude" src="https://img.shields.io/badge/assistant-Claude-0f231c">
+</p>
+
 # Family Finance Hub
 
 **Know where the month stands, ask before you spend, and plan the way out of the
-minus.** A private, mobile-first finance hub for one household, built on top of
-[RiseUp](https://www.riseup.co.il): it reads your cashflow through RiseUp's
-official read-only MCP server, keeps its own copy, and adds what a budgeting app
-does not do: a morning brief, an assistant that answers "can I buy this?", and a
-planner that tells you how much has to change and what a loan would really cost.
+minus.**
 
-Hebrew, right-to-left, on your own domain, open only to the two to four people
-you list.
+Budgeting apps tell you what happened. This one is built for the three moments
+that actually change a household's money: the morning, when you want one honest
+picture; the checkout, when you want to know if this purchase fits; and the
+kitchen-table conversation about whether a loan would help or just postpone the
+problem.
+
+It is a private, mobile-first finance hub for one household, built on top of
+[RiseUp](https://www.riseup.co.il) (the Israeli cashflow app): it reads your
+cashflow through RiseUp's official read-only MCP server, keeps its own copy, and
+adds a daily brief, an AI assistant that checks the numbers before it answers, and
+a planner that says how much has to change and what each way of financing the gap
+would really cost.
+
+Hebrew and right-to-left, on your own domain, open only to the two to four people
+you list. Open source, MIT licensed, serverless, with a budget alarm at $5 a month.
 
 <p align="center">
   <img src="docs/screenshots/home.png" width="24%" alt="The daily brief: yesterday's spending, what today allows, which rubrics went over">
@@ -17,7 +36,7 @@ you list.
   <img src="docs/screenshots/next-month.png" width="24%" alt="Next month, predicted per category against its budget">
 </p>
 
-<p align="center"><sub>Built-in sample data (<code>?demo=tight</code>: a household that spends more than it earns).</sub></p>
+<p align="center"><sub>All screenshots use the built-in sample data (<code>?demo=tight</code>: a household that spends more than it earns). No real figures appear anywhere in this repository.</sub></p>
 
 ## Three things it does
 
@@ -79,6 +98,53 @@ the three questions that matter:
 Plus a **what-if planner**: a bonus, a raise, a new expense, a loan that closes
 installment plans, month by month, with a safe daily spend.
 
+## Numbers you can trust
+
+A finance tool that is off by a little is worse than none, so precision is a
+feature here, not an afterthought.
+
+- **One to one with the source.** Every transaction RiseUp counts appears in the
+  hub exactly once, in exactly one place. What RiseUp keeps out of the cashflow
+  (transfers between accounts, the card bill as the bank sees it) is shown, and
+  never summed, so totals do not double.
+- **One loan is one loan.** A loan repaid in installments changes by a few shekels
+  every month. Identify a plan by its amount and one loan becomes three, each with
+  its own "remaining debt". The hub identifies a plan by who, how many payments,
+  which account, and the month it started.
+- **Different charges stay different.** Four app-store subscriptions under one
+  name are four lines, because each can change or be cancelled on its own. Only
+  the same thing seen twice is consolidated.
+- **The same merchant, whatever it prints.** `SPOTIFY*P4638D` this month and
+  `SPOTIFY*P45168` next month are one subscription.
+- **Every tab tells the same story.** Home, fixed, variable, transactions and
+  trends are different cuts of the same month; next month, the what-if planner and
+  the path to balance start from the same figures. A consistency test suite pins
+  every place where two screens state the same fact, so they cannot drift apart.
+- **Honest about what it does not know.** RiseUp does not report account balances,
+  so the planner asks. A pending charge with two plausible names says "probably A
+  or B" instead of guessing. A forecast is labelled an estimate, with its basis.
+
+## A tour of the screens
+
+| Screen | What is on it |
+|--------|---------------|
+| **בית** Home | The daily brief, what is left to spend, what is really free, pace against the month, alerts, top recommendations |
+| **קבועות** Fixed | Income, every fixed charge (paid or pending, with inferred names and expected dates), what changed since last month, fixed charges over time |
+| **משתנות** Variable | Your rubrics against their targets, budget shifts you approved, everyday spending outside the rubrics, biggest purchases, open installment plans |
+| **עסקאות** Transactions | Every transaction with search, a comparison with last month, spending per card and account, what RiseUp excludes and what it removed |
+| **מגמות** Trends | What was left each month, fixed against variable, each category against its own average |
+| **תכנון** Planning | The path to balance, next month's forecast, recommendations with their evidence and steps, the what-if planner |
+
+<p align="center">
+  <img src="docs/screenshots/fixed.png" width="24%" alt="Fixed charges, paid and pending, with inferred names">
+  <img src="docs/screenshots/variable.png" width="24%" alt="Rubrics against their targets">
+  <img src="docs/screenshots/trends.png" width="24%" alt="Trends across months">
+  <img src="docs/screenshots/planner.png" width="24%" alt="The what-if planner">
+</p>
+
+Every widget can be moved, sent to another screen or hidden, per person. Every
+item opens a detail sheet with its full history.
+
 ## Why it is built this way
 
 - **Every number can be recomputed by hand.** The finance logic is pure, tested
@@ -95,7 +161,10 @@ installment plans, month by month, with a safe daily spend.
   this repository: account ids, domain, emails and resource names come from `.env`
   and from GitHub environment **secrets** (secrets, because the run logs of a
   public repository are public).
-- **Cheap.** Serverless end to end, with a budget alarm at $5 a month.
+- **Cheap.** Serverless end to end (Lambda, S3, API Gateway, EventBridge Scheduler,
+  Cloudflare Pages and Access), with a budget alarm at $5 a month.
+- **Accessible.** Hebrew and RTL throughout, large tap targets, three text sizes,
+  light and dark, screen-reader labels, and a data table behind every chart.
 
 ## How it works
 
