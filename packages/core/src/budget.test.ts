@@ -148,12 +148,13 @@ describe('naming a fixed charge RiseUp has not named yet', () => {
   const budget = (es: RiseupBudget['envelopes']): RiseupBudget => ({ budgetDate: '2026-09', lastUpdatedAt: '', envelopes: [paid, ...es] });
   const previousFixed = [{ businessName: 'חשמל', amount: 300, day: 12 }, { businessName: 'מים', amount: 62, day: 5 }, { businessName: 'גז', amount: 62.5, day: 28 }, { businessName: 'ארנונה', amount: 100, day: 2 }];
 
-  it('one fit gives a name; several give candidates, and the expected day breaks the tie', () => {
-    const [ , one, tie, byDay, none] = buildEnvelopes(budget([env('a', 300), env('b', 62), env('c', 62, '2026-09-28'), env('d', 999)]), { previousFixed });
+  it('one fit gives a name; two charges and two fits each take one, the expected day deciding which', () => {
+    const [ , one, other, byDay, none] = buildEnvelopes(budget([env('a', 300), env('b', 62), env('c', 62, '2026-09-28'), env('d', 999)]), { previousFixed });
     expect(one).toMatchObject({ label: 'חשמל', guessed: true });
-    expect(tie!.maybe).toEqual(expect.arrayContaining(['מים', 'גז']));
-    expect(byDay!.maybe![0]).toBe('גז');
-    expect(byDay!.due).toBe('2026-09-28');
+    expect(byDay).toMatchObject({ label: 'גז', guessed: true, due: '2026-09-28' }); // גז is charged on the 28th
+    expect(other).toMatchObject({ label: 'מים', guessed: true });
+    // one charge, two fits: that would be a guess, so it stays a "probably"
+    expect(buildEnvelopes(budget([env('b', 62)]), { previousFixed })[1]!.maybe).toEqual(expect.arrayContaining(['מים', 'גז']));
     expect(none).toMatchObject({ label: 'חיוב קבוע צפוי', guessed: false });
     expect(none!.maybe).toBeUndefined();
   });

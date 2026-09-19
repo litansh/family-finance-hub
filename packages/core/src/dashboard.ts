@@ -111,9 +111,16 @@ export function buildDashboard(i: DashboardInputs): Dashboard {
   const totals = monthlyTotals(upTo);
   const installments = installmentPlans(upTo, month);
   const hoursSinceSync = i.lastSyncAt ? (Date.parse(`${i.today}T12:00:00Z`) - Date.parse(i.lastSyncAt)) / 3_600_000 : undefined;
-  const baseline = deriveBaseline(totals, status, installments);
+  // Plans whose last installment was charged in the viewed month.
+  const closedMonths = [...new Set(history.map((t) => t.cashflowDate))].sort().slice(-3);
+  const endingNow = monthTxns.filter((t) => !t.isIncome && t.isInstallment && !!t.totalNumberOfInstallments && t.installmentNumber === t.totalNumberOfInstallments).map((t) => ({
+    businessName: t.businessName, amount: t.amount, fixed: isFixed(t),
+    shareOfAverage: closedMonths.length ? history.filter((h) => closedMonths.includes(h.cashflowDate) && h.isInstallment && h.businessName === t.businessName && h.totalNumberOfInstallments === t.totalNumberOfInstallments && Math.abs(h.amount - t.amount) < Math.max(1, t.amount * 0.03)).reduce((s, h) => s + h.amount, 0) / closedMonths.length : 0,
+  }));
+  const doubtful = status.envelopes.filter((e) => e.kind === 'fixed' && !e.paid && (e.pendingMonths ?? 0) >= 1).reduce((s, e) => s + e.planned, 0);
+  const baseline = deriveBaseline(totals, status, installments, endingNow.filter((p) => p.fixed).reduce((s, p) => s + p.amount, 0) + doubtful, endingNow.filter((p) => !p.fixed).reduce((s, p) => s + p.shareOfAverage, 0));
   const historyLines: HistoryLine[] = upTo.map((t) => ({ id: t.transactionId, k: t.commitmentId ?? businessKey(t.businessName), name: t.businessName, m: t.cashflowDate, d: t.transactionDate.slice(0, 10), a: t.amount, inc: t.isIncome, cat: t.categoryLabel ?? 'אחר', fixed: isFixed(t) }));
-  const next = nextMonth({ status, baseline, installments, history: historyLines, plan: i.plan });
+  const next = nextMonth({ status, baseline, installments, history: historyLines, endingNow, plan: i.plan });
   const free = freeToSpend(status);
   const byDate = (a: ViewTransaction, b: ViewTransaction) => b.transactionDate.localeCompare(a.transactionDate);
 

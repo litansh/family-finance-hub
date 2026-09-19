@@ -224,7 +224,7 @@ function Free({ d, setCommitment, go }: Ctx) {
           {c.spent > c.amount && <span className="pill p1">חריגה של {money(c.spent - c.amount)}</span>}
         </>, false, c.label))}
         {line('פנוי לכל שאר ההוצאות המשתנות', signedMoney(f.freeForRest), undefined, true)}
-        {line('כבר יצא על שאר המשתנות', <>−{money(f.restSpent)}</>)}
+        <button type="button" className="row tap" onClick={() => go('variable')}><span className="name">כבר יצא מחוץ לרובריקות</span><span className="amt">−{money(f.restSpent)}</span><div className="meta"><span>אלה "הוצאות שוטפות" במסך המשתנות. הקישו לפירוט.</span></div></button>
         {line(f.restLeft >= 0 ? 'נשאר' : 'חריגה', <span className={`delta ${f.restLeft >= 0 ? 'good' : 'bad'}`}>{money(Math.abs(f.restLeft))}</span>, f.restLeft > 0 && d.status.daysLeft > 0 ? <span>בערך <span className="num">{money(f.restLeftPerDay)}</span> ליום</span> : undefined, true)}
       </div>
       <button className="more" onClick={() => setEditing(!editing)}>{editing ? 'סיום' : 'סכום משלכם לרובריקה (במקום היעד שברייזאפ)'}</button>
@@ -304,7 +304,12 @@ function NextMonthView({ d }: Ctx) {
       )}
       {n.fixed.ending.length > 0 && (
         <div className="rows">
-          {n.fixed.ending.map((l, i) => <div className="row" key={i}><span className="name">{l.label}</span><span className="amt in">{money(l.amount)}</span><div className="meta"><span className="pill ok">מסתיים החודש, מתפנה מהחודש הבא</span></div></div>)}
+          {n.fixed.ending.map((l, i) => <div className="row" key={i}><span className="name">{l.label}</span><span className="amt in">{money(l.amount)}</span><div className="meta"><span className="pill ok">התשלום האחרון ירד החודש, מתפנה מהחודש הבא</span></div></div>)}
+        </div>
+      )}
+      {n.fixed.doubtful.length > 0 && (
+        <div className="rows">
+          {n.fixed.doubtful.map((l, i) => <div className="row" key={i}><span className="name">{l.label}</span><span className="amt">{money(l.amount)}</span><div className="meta"><span className="pill p2">לא נספר: רייזאפ מצפה לו כבר חודשים והוא לא ירד</span></div></div>)}
         </div>
       )}
       <h3 style={{ margin: '1rem 0 0.25rem' }}>הוצאות משתנות צפויות · <span className="num">{money(n.variable.total)}</span></h3>
@@ -335,7 +340,7 @@ function Everyday({ d, open, openTxn }: Ctx) {
   const ids = new Set(e.items.map((i) => i.transactionId));
   const txns = d.transactions.filter((t) => ids.has(t.transactionId));
   return (
-    <Section title="הוצאות שוטפות" term="flexible" hint={<span className="num">{money(e.actual)}</span>} defaultOpen={false} note="כל ההוצאות המשתנות שאינן שייכות לקטגוריה במעקב. לרייזאפ אין להן תקציב; מה שפנוי להן הוא מה שנשאר אחרי הקבועות והקטגוריות.">
+    <Section title="הוצאות שוטפות" term="flexible" hint={<span className="num">{money(e.actual)}</span>} defaultOpen={false} note='זו המעטפה של רייזאפ עצמו לכל הוצאה משתנה שלא שייכת לאחת הרובריקות שהגדרתם (בדרך כלל הקטגוריה "אחר": העברות, משיכות מזומן, תשלומים חד־פעמיים). לרייזאפ אין לה תקציב; מה שפנוי לה הוא מה שנשאר אחרי הקבועות והרובריקות. כדי להעביר הוצאה מכאן לרובריקה: הקישו עליה ובחרו קטגוריה.'>
       <EnvelopeRow e={e} open={open} />
       <div className="rows">{txns.slice(0, 12).map((t) => <TxnRow t={t} onOpen={openTxn} key={t.transactionId} />)}</div>
       {txns.length > 12 && <button className="more" onClick={() => open({ kind: 'envelope', e })}>כל {txns.length} העסקאות</button>}

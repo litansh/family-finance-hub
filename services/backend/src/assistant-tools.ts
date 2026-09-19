@@ -112,7 +112,7 @@ export function nextMonthView(d: Dashboard) {
   return {
     month: n.month, averages_taken_from: n.basisMonths,
     expected_income: { total: r(n.income.total), lines: n.income.lines.map((l) => ({ name: l.label, amount: r(l.amount) })) },
-    fixed_charges: { total: r(n.fixed.total), largest: n.fixed.lines.slice(0, 12).map((l) => ({ name: l.label, amount: r(l.amount) })), ending_this_month: n.fixed.ending.map((l) => ({ name: l.label, amount: r(l.amount) })) },
+    fixed_charges: { total: r(n.fixed.total), largest: n.fixed.lines.slice(0, 12).map((l) => ({ name: l.label, amount: r(l.amount) })), ending_this_month: n.fixed.ending.map((l) => ({ name: l.label, amount: r(l.amount) })), not_counted_probably_cancelled: n.fixed.doubtful.map((l) => ({ name: l.label, amount: r(l.amount) })) },
     variable_spending: { predicted_total: r(n.variable.total), by_category: n.variable.categories.slice(0, 20).map((c) => ({ category: c.label, predicted: r(c.predicted), budget: c.budget === undefined ? null : r(c.budget), last_months: c.lastMonths.map(r), trend: c.trend })) },
     already_planned_by_the_family: n.planned.map((l) => ({ name: l.label, amount: r(l.amount) })),
     expected_left_at_month_end: r(n.net), left_if_every_tracked_category_keeps_its_budget: r(n.ifOnBudget),

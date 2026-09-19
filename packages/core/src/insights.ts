@@ -43,12 +43,22 @@ export interface Recurring {
 const day = (t: StoredTransaction) => t.transactionDate.slice(0, 10);
 
 // Bank descriptors vary in whitespace, punctuation and trailing branch numbers.
-export const businessKey = (name: string): string =>
-  name
-    .toLowerCase()
-    .replace(/[\d"'.,\-_/\\()*#]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+// The same merchant, whatever reference it printed this month: "PAYPAL *SPOTIFY*P4638D"
+// and "PAYPAL *SPOTIFY*P45168" are one business. A word that carries a digit is a
+// reference, not a name, and is dropped whole; if that leaves nothing, the digits
+// alone are dropped instead.
+export const businessKey = (name: string): string => {
+  const words = name.toLowerCase().split(/[\s*]+/).filter(Boolean);
+  const named = words.filter((w) => !/\d/.test(w));
+  return (named.length ? named : words).join(' ').replace(/[\d"'.,\-_/\\()*#]+/g, ' ').replace(/\s+/g, ' ').trim();
+};
+
+// For showing a merchant without its reference code.
+export const businessDisplayName = (name: string): string => {
+  const words = name.split(/\s+/).filter(Boolean);
+  const kept = words.filter((w, i) => i === 0 || !/\d/.test(w.replace(/^\*+|\*+$/g, '').split('*').at(-1) ?? ''));
+  return (kept.join(' ').replace(/\*[A-Za-z]*\d[\w-]*$/g, '').replace(/\s+/g, ' ').trim()) || name.trim();
+};
 
 export function median(xs: number[]): number {
   if (xs.length === 0) return 0;

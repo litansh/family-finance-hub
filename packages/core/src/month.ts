@@ -1,4 +1,5 @@
 import { shiftTotals, type BudgetShift, type Commitments } from './budget.ts';
+import { businessDisplayName, businessKey } from './insights.ts';
 import type { Overrides, StoredTransaction } from './overlay.ts';
 import type { RiseupActual, RiseupBudget, RiseupEnvelope } from './riseup.ts';
 
@@ -111,19 +112,22 @@ export function buildEnvelopes(budget: RiseupBudget, ctx: StatusContext = {}): E
   const votes = fixed.filter((e) => e.actuals[0] && e.balancedAmount).map((e) => (e.balancedAmount! > 0) !== e.actuals[0]!.isIncome);
   const positiveIsExpense = votes.filter(Boolean).length >= votes.length / 2;
 
-  const paidNames = new Set(fixed.flatMap((e) => e.actuals.map((a) => a.businessName)));
-  const candidates = (ctx.previousFixed ?? []).filter((p) => !paidNames.has(p.businessName));
+  // One candidate per merchant: the reference a merchant prints changes monthly
+  // ("SPOTIFY*P4638D", "SPOTIFY*P45168"), and that is still one subscription.
+  const paidKeys = new Set(fixed.flatMap((e) => e.actuals.map((a) => businessKey(a.businessName))));
+  const candidates = (ctx.previousFixed ?? []).filter((p) => !paidKeys.has(businessKey(p.businessName))).map((p) => ({ ...p, key: businessKey(p.businessName), businessName: businessDisplayName(p.businessName) }));
   const close = (a: number, b: number) => Math.abs(a - b) <= Math.max(1, b * 0.03);
   // Names that fit a pending amount, best first: the expected day breaks ties.
   const namesFor = (planned: number, day?: number): string[] => {
-    const score = new Map<string, number>();
+    const score = new Map<string, { s: number; name: string }>();
     for (const p of candidates) {
       if (!close(p.amount, planned)) continue;
       const dayGap = day && p.day ? Math.min(Math.abs(p.day - day), 31 - Math.abs(p.day - day)) : 15;
       const s = Math.abs(p.amount - planned) / Math.max(planned, 1) + dayGap / 100;
-      score.set(p.businessName, Math.min(score.get(p.businessName) ?? Infinity, s));
+      const seen = score.get(p.key);
+      if (!seen || s < seen.s) score.set(p.key, { s, name: p.businessName });
     }
-    return [...score.entries()].sort((a, b) => a[1] - b[1]).map(([n]) => n);
+    return [...score.values()].sort((a, b) => a.s - b.s).map((x) => x.name);
   };
   const taken = new Set<string>();
 
@@ -147,6 +151,23 @@ export function buildEnvelopes(budget: RiseupBudget, ctx: StatusContext = {}): E
       planned, actual: sum(e.actuals.map(actualAmount)), paid: e.actuals.length > 0, items: e.actuals.map(item),
       raw: { ids: [e.id], balancedAmount: [e.balancedAmount], originalAmount: [e.originalAmount], balanceDate: [e.balanceDate] },
     }));
+  }
+
+  // Two pending charges of the same amount and exactly two merchants that fit
+  // (two children's policies, say): each takes one. With more names than charges
+  // it stays a "probably", because then it would be a guess.
+  const undecided = out.filter((e) => e.kind === 'fixed' && !e.paid && e.maybe);
+  const bySet = new Map<string, EnvelopeStatus[]>();
+  for (const e of undecided) { const k = [...e.maybe!].sort().join('|'); bySet.set(k, [...(bySet.get(k) ?? []), e]); }
+  for (const es of bySet.values()) {
+    const names = es[0]!.maybe!.filter((n) => !taken.has(n));
+    if (names.length !== es.length) continue;
+    // Each charge's own list is ordered best first, and a charge with an expected
+    // day knows more than one without, so it chooses first.
+    for (const e of [...es].sort((a, b) => Number(!a.due) - Number(!b.due))) {
+      const name = e.maybe!.find((n) => !taken.has(n))!;
+      e.label = name; e.guessed = true; e.maybe = undefined; taken.add(name);
+    }
   }
 
   // Tracked categories: RiseUp may split one into weekly envelopes
@@ -195,7 +216,7 @@ export function buildEnvelopes(budget: RiseupBudget, ctx: StatusContext = {}): E
   for (const e of budget.envelopes) {
     if (e.type === 'variable') {
       const acts = landed.get(null) ?? [];
-      out.push(finish({ id: e.id, kind: 'everyday', type: e.type, isIncome: false, label: 'הוצאות שוטפות (ללא קטגוריה במעקב)', planned: 0, actual: sum(acts.map((x) => actualAmount(x.a))), paid: false, items: acts.map((x) => item(x.a)),
+      out.push(finish({ id: e.id, kind: 'everyday', type: e.type, isIncome: false, label: 'הוצאות שוטפות (מחוץ לרובריקות)', planned: 0, actual: sum(acts.map((x) => actualAmount(x.a))), paid: false, items: acts.map((x) => item(x.a)),
         raw: { ids: [e.id], balancedAmount: [e.balancedAmount], originalAmount: [e.originalAmount], balanceDate: [e.balanceDate] } }));
     } else if (e.type === 'variableIncome') {
       const actual = sum(e.actuals.map(actualAmount));

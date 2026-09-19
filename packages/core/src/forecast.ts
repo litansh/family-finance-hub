@@ -89,7 +89,10 @@ export function loanBalance(principal: number, annualRatePct: number, months: nu
   return principal * g - loanPayment(principal, annualRatePct, months) * ((g - 1) / r);
 }
 
-export function deriveBaseline(months: MonthTotals[], status: MonthStatus, installments: InstallmentPlan[]): Baseline {
+// `notRepeating`: fixed charges in this month's figure that no future month will carry: a plan whose
+// last installment was just paid, and a charge RiseUp keeps expecting that never comes. The planner, the
+// path to balance and next month's forecast all start from the same fixed figure because of it.
+export function deriveBaseline(months: MonthTotals[], status: MonthStatus, installments: InstallmentPlan[], notRepeating = 0, endedVariable = 0): Baseline {
   const closed = months.filter((m) => m.month < status.month);
   const incomeFrom = closed.slice(-6);
   const variableFrom = closed.slice(-3);
@@ -103,8 +106,9 @@ export function deriveBaseline(months: MonthTotals[], status: MonthStatus, insta
   return {
     month: status.month,
     income,
-    fixed: Math.max(status.fixed.planned - instFixed, 0),
-    variable: Math.max(variableAvg - instVariable, 0),
+    fixed: Math.max(status.fixed.planned - instFixed - notRepeating, 0),
+    // `endedVariable`: the part of that average made of installment plans that have just finished.
+    variable: Math.max(variableAvg - instVariable - endedVariable, 0),
     restOfMonth: live ? status.income.expected - status.income.received - status.fixed.pending - pace * status.daysLeft : 0,
     installments,
     basis: { incomeMonths: incomeFrom.length, variableMonths: variableFrom.length },

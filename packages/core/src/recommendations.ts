@@ -71,7 +71,7 @@ export function buildRecommendations(i: RecoInputs): Recommendation[] {
   // monthly repayment or, when taken through a card, as an installment plan.
   const loanPlans = i.installments.filter((p) => LOAN.some((w) => p.businessName.includes(w)));
   const loanRows = [
-    ...active.filter((r) => recHas(r, LOAN) && !recHas(r, MORTGAGE)).map((r) => ({ label: r.businessName, amount: r.lastAmount, left: undefined as number | undefined })),
+    ...active.filter((r) => recHas(r, LOAN) && !recHas(r, MORTGAGE) && !loanPlans.some((p) => businessKey(p.businessName) === businessKey(r.businessName))).map((r) => ({ label: r.businessName, amount: r.lastAmount, left: undefined as number | undefined })),
     ...loanPlans.map((p) => ({ label: `${p.businessName} (תשלום ${p.paid} מתוך ${p.total})`, amount: p.monthly, left: p.remainingAmount })),
   ];
   if (loanRows.length >= 2) {

@@ -105,21 +105,38 @@ const addMonthsTo = (month: string, n: number) => {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 };
 
-// Money already committed to future months through card installments.
+// Money already committed to future months through installment plans.
+//
+// A plan is recognised by who, how many payments, which account, and the month
+// it started (payment number counted back from the charge). The amount is NOT
+// part of it: a loan repaid in installments changes by a few shekels every
+// month, and the first payment of a card plan is often rounded differently, so
+// keying on the amount showed one loan as three.
 export function installmentPlans(txns: StoredTransaction[], month: string): InstallmentPlan[] {
-  const latest = new Map<string, RiseupTransaction>();
+  const monthsApart = (from: string, to: string) => (Number(to.slice(0, 4)) - Number(from.slice(0, 4))) * 12 + Number(to.slice(5)) - Number(from.slice(5));
+  const groups = new Map<string, StoredTransaction[]>();
   for (const t of txns) {
     if (!counts(t) || !t.isInstallment || t.isIncome || !t.totalNumberOfInstallments || !t.installmentNumber) continue;
-    const key = `${t.businessName}|${t.amount.toFixed(2)}|${t.totalNumberOfInstallments}|${t.accountNumberHash ?? ''}`;
-    const cur = latest.get(key);
-    if (!cur || t.cashflowDate > cur.cashflowDate) latest.set(key, t);
+    const started = addMonthsTo(t.cashflowDate, -(t.installmentNumber - 1));
+    const key = `${t.businessName}|${t.totalNumberOfInstallments}|${t.accountNumberHash ?? ''}|${started}`;
+    groups.set(key, [...(groups.get(key) ?? []), t]);
   }
-  return [...latest.entries()]
-    .map(([key, t]) => {
+  const plans: { key: string; latest: StoredTransaction }[] = [];
+  for (const [key, ts] of groups) {
+    // Two purchases at the same shop, in the same month, over the same number of
+    // payments are two plans: each month then carries two charges. They are told
+    // apart by amount, which within one month is a fair identity.
+    const perMonth = new Map<string, StoredTransaction[]>();
+    for (const t of ts) perMonth.set(t.cashflowDate, [...(perMonth.get(t.cashflowDate) ?? []), t]);
+    const lastMonth = [...perMonth.keys()].sort().at(-1)!;
+    const seeds = [...perMonth.get(lastMonth)!].sort((a, b) => a.amount - b.amount);
+    seeds.forEach((latest, n) => plans.push({ key: seeds.length > 1 ? `${key}|${n}` : key, latest }));
+  }
+  return plans
+    .map(({ key, latest: t }) => {
       const total = t.totalNumberOfInstallments!;
       // Payments between the last one we saw and the viewed month have happened too.
-      const elapsed = Math.max(0, (Number(month.slice(0, 4)) - Number(t.cashflowDate.slice(0, 4))) * 12 + Number(month.slice(5)) - Number(t.cashflowDate.slice(5)));
-      const paid = Math.min(total, t.installmentNumber! + elapsed);
+      const paid = Math.min(total, t.installmentNumber! + Math.max(0, monthsApart(t.cashflowDate, month)));
       const remainingPayments = total - paid;
       return { key, businessName: t.businessName, monthly: t.amount, paid, total, remainingPayments, fixed: isFixed(t),
         remainingAmount: remainingPayments * t.amount, lastMonth: addMonthsTo(t.cashflowDate, total - t.installmentNumber!) };

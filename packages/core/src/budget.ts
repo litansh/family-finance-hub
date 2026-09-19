@@ -69,7 +69,12 @@ export function freeToSpend(status: MonthStatus): FreeToSpend {
 
 // ---- Next month ----------------------------------------------------------------
 
-export interface NextMonthLine { label: string; amount: number; note?: string }
+export interface NextMonthLine { label: string; amount: number; note?: string; count?: number }
+
+// An installment plan whose last payment falls in the viewed month.
+// `shareOfAverage`: how much of it sits inside the closed-month average the variable forecast is built on.
+// A two-payment plan that started last month is in one of three averaged months, not in all of them.
+export interface EndingPayment { businessName: string; amount: number; fixed: boolean; shareOfAverage?: number }
 
 export interface NextMonthCategory {
   label: string;
@@ -83,7 +88,9 @@ export interface NextMonth {
   month: string;
   basisMonths: string[]; // the closed months the averages come from
   income: { total: number; lines: NextMonthLine[] };
-  fixed: { total: number; lines: NextMonthLine[]; ending: NextMonthLine[] };
+  // `ending`: last installment paid this month. `doubtful`: RiseUp has expected the charge for
+  // months and it never came, so it is probably cancelled. Neither is counted next month.
+  fixed: { total: number; lines: NextMonthLine[]; ending: NextMonthLine[]; doubtful: NextMonthLine[] };
   variable: { total: number; categories: NextMonthCategory[] };
   planned: NextMonthLine[]; // one-off and monthly events from the saved what-if plan; signed
   net: number; // what the month is expected to leave
@@ -98,6 +105,7 @@ export interface NextMonthInputs {
   baseline: Baseline;
   installments: InstallmentPlan[];
   history: HistoryRow[];
+  endingNow?: EndingPayment[];
   plan?: Plan;
 }
 
@@ -108,7 +116,7 @@ export const addMonth = (month: string, n: number) => {
 };
 
 export function nextMonth(i: NextMonthInputs): NextMonth {
-  const { status, baseline, installments, history } = i;
+  const { status, baseline, history } = i;
   const month = addMonth(status.month, 1);
 
   // Income: what RiseUp expects every month, plus the usual variable income.
@@ -120,17 +128,25 @@ export function nextMonth(i: NextMonthInputs): NextMonth {
   const extra = Math.max(baseline.income - steady, 0);
   if (extra > 1) incomeLines.push({ label: 'הכנסות משתנות (לפי החודשים האחרונים)', amount: extra });
 
-  // Fixed charges repeat, except installment plans whose last payment is this month.
-  const endingKeys = new Set(installments.filter((p) => p.fixed && p.lastMonth <= status.month).map((p) => p.businessName));
+  // Fixed charges repeat, with two exceptions: a plan whose last installment was
+  // paid this month, and a charge RiseUp keeps expecting that never comes.
+  const endsNow = [...(i.endingNow ?? []).filter((p) => p.fixed)];
   const charges = status.envelopes.filter((e) => e.kind === 'fixed');
-  const fixedLines: NextMonthLine[] = [];
+  const merged = new Map<string, NextMonthLine>();
   const ending: NextMonthLine[] = [];
+  const doubtful: NextMonthLine[] = [];
   for (const e of charges) {
     const amount = e.paid ? e.actual : e.planned;
     if (amount <= 0) continue;
-    (endingKeys.has(e.label) ? ending : fixedLines).push({ label: e.label, amount, note: e.guessed ? 'שם משוער' : undefined });
+    const at = e.paid ? endsNow.findIndex((p) => p.businessName === e.label && Math.abs(p.amount - amount) < 1) : -1;
+    if (at >= 0) { endsNow.splice(at, 1); ending.push({ label: e.label, amount }); continue; }
+    if (!e.paid && (e.pendingMonths ?? 0) >= 1) { doubtful.push({ label: e.maybe ? `כנראה ${e.maybe.join(' או ')}` : e.label, amount }); continue; }
+    // Several charges under one name (four app-store subscriptions) read better as one line.
+    const line = merged.get(e.label);
+    if (line) { line.amount += amount; line.count = (line.count ?? 1) + 1; }
+    else merged.set(e.label, { label: e.label, amount, note: e.guessed ? 'שם משוער' : undefined });
   }
-  fixedLines.sort((a, b) => b.amount - a.amount);
+  const fixedLines = [...merged.values()].sort((a, b) => b.amount - a.amount);
 
   // Variable spending, per category, from the last three closed months.
   const closed = [...new Set(history.filter((h) => h.m < status.month).map((h) => h.m))].sort().slice(-3);
@@ -145,7 +161,7 @@ export function nextMonth(i: NextMonthInputs): NextMonth {
     perCat.set(h.cat, row);
   }
   // Installments that end this month stop weighing on their category.
-  const endingVariable = sum(installments.filter((p) => !p.fixed && p.lastMonth <= status.month).map((p) => p.monthly));
+  const endingVariable = sum((i.endingNow ?? []).filter((p) => !p.fixed).map((p) => p.shareOfAverage ?? p.amount));
   const categories: NextMonthCategory[] = [...perCat.entries()].map(([label, row]) => {
     const predicted = closed.length ? sum(row) / closed.length : 0;
     const first = row[0] ?? 0, last = row.at(-1) ?? 0;
@@ -170,7 +186,7 @@ export function nextMonth(i: NextMonthInputs): NextMonth {
   return {
     month, basisMonths: closed,
     income: { total: incomeTotal, lines: incomeLines },
-    fixed: { total: fixedTotal, lines: fixedLines, ending },
+    fixed: { total: fixedTotal, lines: fixedLines, ending, doubtful },
     variable: { total: variableTotal, categories },
     planned,
     net: incomeTotal - fixedTotal - variableTotal + plannedTotal,
