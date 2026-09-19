@@ -1,4 +1,4 @@
-import { emptyPlan, EVERYDAY, loanPayment, maxDailySpend, simulate, spendCheck, type Dashboard, type PlanEvent } from '@hub/core';
+import { emptyPlan, EVERYDAY, loanPayment, maxDailySpend, simulate, spendCheck, strategy, type Dashboard, type PlanEvent, type StrategyInputs } from '@hub/core';
 
 // What the assistant can look up. Plain functions over the same dashboard the
 // UI renders, so an answer can never disagree with the screen.
@@ -138,5 +138,30 @@ export function checkPurchase(d: Dashboard, q: { amount: number; category?: stri
     next_month_expected_left: r(d.nextMonth.net),
     tracked_categories: tracked.map((e) => e.label),
     shifts_already_made_this_month: d.shifts.map((s) => ({ from: s.from, to: s.to, amount: s.amount, reason: s.reason ?? null })),
+  };
+}
+
+// The path to balance: trend, the cut it takes, and the cheapest way to carry the
+// months in between. `saved` is what the family entered on the planning screen;
+// anything the model passes overrides it for this one calculation only.
+export function pathToBalance(d: Dashboard, saved: Partial<StrategyInputs> | null | undefined, q: Partial<StrategyInputs>) {
+  const s = strategy(d.months, d.baseline, { ...(saved ?? {}), ...q }, d.history);
+  const t = s.trend;
+  return {
+    assumptions_used: { ...s.inputs, note: 'Values the family did not state come from the planning screen or from defaults (8% loan over 60 months, 11% overdraft, no overdraft line, balance 0). Say which ones you assumed.' },
+    trend: { fitted_on_closed_months: t.months.length, typical_income_now: r(t.incomeNow), typical_expenses_now: r(t.expensesNow), monthly_gap_now: r(t.gapNow), recurring_income_now: r(t.steadyIncomeNow), irregular_income_per_month_on_average: r(t.irregularIncomePerMonth), recurring_income_change_per_month: r(t.incomeSlope), expenses_change_per_month: r(t.expenseSlope), months_until_the_trend_alone_closes_the_gap: t.monthsToBalanceOnTrend },
+    // How the shortfall has been covered so far: money RiseUp keeps out of the cashflow (transfers from savings, loans received).
+    money_brought_in_from_outside_the_cashflow: d.outside.map((o) => ({ month: o.month, amount: r(o.moneyIn) })),
+    cut_needed_to_balance_today: r(s.cutToBalanceToday),
+    cut_needed_per_month_to_balance_by_target: r(s.cutNeededByTarget),
+    hole_the_plan_digs_before_interest: r(s.bridgeNeeded),
+    cheapest_option_that_holds: s.recommended,
+    options: s.options.map((o) => ({
+      option: o.id, new_loan: r(o.loanPrincipal), monthly_payment: r(o.loanPayment), closes_existing_debt: r(o.paysOff), monthly_payments_freed: r(o.freedMonthly), cash_reaching_the_account: r(o.cashIn),
+      stays_within_the_overdraft_line: o.holds, extra_monthly_improvement_needed_to_hold: r(o.missingPerMonth),
+      lowest_balance: { amount: r(o.lowest.balance), month: o.lowest.month }, balanced_from: o.breakEvenMonth,
+      loan_interest_over_its_life: r(o.loanInterest), overdraft_interest: r(o.overdraftInterest), total_cost: r(o.totalCost), still_owed_at_end_of_horizon: r(o.debtAtEnd),
+    })),
+    horizon_months: s.horizon,
   };
 }

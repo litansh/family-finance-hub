@@ -1,7 +1,7 @@
 import { freeToSpend, nextMonth, type BudgetShift, type Commitments, type FreeToSpend, type NextMonth } from './budget.ts';
 import { deriveBaseline, type Baseline, type Plan } from './forecast.ts';
 import { buildAlerts, businessKey, detectRecurring, type Alert, type Recurring } from './insights.ts';
-import { cleanCategory, monthStatus, type MonthStatus } from './month.ts';
+import { actualAmount, cleanCategory, monthStatus, type MonthStatus } from './month.ts';
 import { annotateWithBudget, applyOverrides, counts, installmentPlans, isFixed, type InstallmentPlan, type Overrides, type StoredTransaction, type ViewTransaction } from './overlay.ts';
 import { buildRecommendations, type Recommendation } from './recommendations.ts';
 import type { RiseupBudget } from './riseup.ts';
@@ -34,6 +34,9 @@ export interface Dashboard {
   baseline: Baseline; // what the planner starts from
   nextMonth: NextMonth; // what the month after the viewed one is expected to look like
   shifts: BudgetShift[]; // budget the family moved between categories this month
+  // Money RiseUp keeps out of the cashflow, per month, newest first: transfers in from savings or a
+  // loan, the card bill seen from the bank. Money coming in here is how a monthly shortfall gets covered.
+  outside: { month: string; moneyIn: number; moneyOut: number }[];
   free: FreeToSpend; // what is left for variable spending once fixed charges and commitments are set aside
   categoryNames: string[];
   history: HistoryLine[];
@@ -129,6 +132,7 @@ export function buildDashboard(i: DashboardInputs): Dashboard {
     nextMonth: nextMonth({ status, baseline, installments, history: historyLines, plan: i.plan }),
     shifts: (i.shifts ?? []).filter((s) => s.month === month),
     free: freeToSpend(status),
+    outside: [i.budget, ...(i.previousBudgets ?? [])].map((b) => ({ month: b.budgetDate, moneyIn: (b.excluded ?? []).filter((a) => a.isIncome).reduce((s, a) => s + actualAmount(a), 0), moneyOut: (b.excluded ?? []).filter((a) => !a.isIncome).reduce((s, a) => s + actualAmount(a), 0) })),
     categoryNames: [...new Set(upTo.filter((t) => !t.isIncome).map((t) => t.categoryLabel ?? 'אחר'))].sort((a, b) => a.localeCompare(b, 'he')),
     history: historyLines,
     previous: totals.filter((m) => m.month < month).at(-1),

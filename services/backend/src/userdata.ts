@@ -1,4 +1,4 @@
-import { EVERYDAY, type BudgetShift, type Commitments, type Overrides, type Plan } from '@hub/core';
+import { EVERYDAY, type BudgetShift, type Commitments, type Overrides, type Plan, type StrategyInputs } from '@hub/core';
 import { createHash, randomBytes } from 'node:crypto';
 import { keys, type Store } from './store.ts';
 
@@ -15,15 +15,16 @@ const str = (v: unknown, max: number, name: string): string | undefined => {
 };
 
 export async function loadUserData(store: Store, email: string) {
-  const [overrides, reco, layout, plans, shifts, commitments] = await Promise.all([
+  const [overrides, reco, layout, plans, shifts, commitments, strategy] = await Promise.all([
     store.get<Overrides>(keys.overrides),
     store.get<RecoState>(keys.reco),
     store.get<unknown>(keys.layout(emailHash(email))),
     store.get<{ plans?: Plan[] }>(keys.plans),
     store.get<BudgetShift[]>(keys.shifts),
     store.get<Commitments>(keys.commitments),
+    store.get<Partial<StrategyInputs>>(keys.strategy),
   ]);
-  return { overrides: overrides ?? {}, reco: reco ?? {}, layout: layout ?? null, plans: plans ?? null, shifts: shifts ?? [], commitments: commitments ?? {} };
+  return { overrides: overrides ?? {}, reco: reco ?? {}, layout: layout ?? null, plans: plans ?? null, shifts: shifts ?? [], commitments: commitments ?? {}, strategy: strategy ?? null };
 }
 
 // Layout is personal: each of us arranges our own screens.
@@ -105,4 +106,28 @@ export async function saveCommitment(store: Store, _email: string, body: unknown
   }
   await store.put(keys.commitments, all);
   return all;
+}
+
+// The family's assumptions for the path to balance. Shared, like the what-if plan.
+export async function saveStrategy(store: Store, _email: string, body: unknown) {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const n = (v: unknown, min: number, max: number, name: string) => {
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max) throw new BadRequest(`${name} must be a number between ${min} and ${max}`);
+    return v;
+  };
+  const loans = Array.isArray(b.existingLoans) ? b.existingLoans : [];
+  if (loans.length > 20) throw new BadRequest('up to 20 existing loans');
+  const out: StrategyInputs = {
+    monthsToBalance: Math.round(n(b.monthsToBalance, 1, 60, 'monthsToBalance')),
+    incomeUp: n(b.incomeUp, 0, 1_000_000, 'incomeUp'), expenseDown: n(b.expenseDown, 0, 1_000_000, 'expenseDown'),
+    followIncomeTrend: b.followIncomeTrend === true,
+    otherIncomePerMonth: b.otherIncomePerMonth === undefined ? 0 : n(b.otherIncomePerMonth, 0, 1_000_000, 'otherIncomePerMonth'),
+    startBalance: n(b.startBalance, -10_000_000, 100_000_000, 'startBalance'),
+    overdraftLimit: n(b.overdraftLimit, 0, 10_000_000, 'overdraftLimit'), overdraftRatePct: n(b.overdraftRatePct, 0, 40, 'overdraftRatePct'),
+    loanAmount: n(b.loanAmount, 0, 10_000_000, 'loanAmount'), loanRatePct: n(b.loanRatePct, 0, 40, 'loanRatePct'), loanMonths: Math.round(n(b.loanMonths, 1, 360, 'loanMonths')),
+    existingLoans: loans.map((l) => { const x = (l ?? {}) as Record<string, unknown>; return { label: str(x.label, 60, 'label') ?? '', monthly: n(x.monthly, 0, 1_000_000, 'monthly'), remaining: n(x.remaining, 0, 100_000_000, 'remaining') }; }),
+    consolidateInstallments: b.consolidateInstallments === true,
+  };
+  await store.put(keys.strategy, out);
+  return out;
 }

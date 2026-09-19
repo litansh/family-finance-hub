@@ -204,6 +204,14 @@ describe('the hub keeps its own data', () => {
       expect((await put('/api/commitment', bad)).statusCode).toBe(400);
   });
 
+  it('shares the path-to-balance assumptions, and refuses nonsense', async () => {
+    const good = { monthsToBalance: 12, incomeUp: 5000, expenseDown: 5000, followIncomeTrend: false, otherIncomePerMonth: 3000, startBalance: -2000, overdraftLimit: 20000, overdraftRatePct: 11, loanAmount: 100000, loanRatePct: 8, loanMonths: 60, existingLoans: [{ label: 'רכב', monthly: 1500, remaining: 40000 }], consolidateInstallments: true };
+    expect((await put('/api/strategy', good, 'noa@example.com')).statusCode).toBe(200);
+    expect((await dashboard('alex@example.com')).user.strategy).toEqual(good);
+    for (const bad of [{ ...good, loanRatePct: 400 }, { ...good, monthsToBalance: 0 }, { ...good, incomeUp: 'a lot' }, { ...good, existingLoans: [{ label: 'x', monthly: -1, remaining: 5 }] }])
+      expect((await put('/api/strategy', bad)).statusCode).toBe(400);
+  });
+
   it('never lets a write touch RiseUp data or escape user/', async () => {
     const before = [...store.data.keys()].filter((k) => !k.startsWith('user/')).map((k) => [k, store.data.get(k)]);
     await put('/api/override', { transactionId: 'x', category: 'a' });

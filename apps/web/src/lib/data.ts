@@ -1,8 +1,8 @@
-import { buildDashboard, sampleData, type BudgetShift, type Commitments, type Dashboard, type Overrides, type Plan } from '@hub/core';
+import { buildDashboard, sampleData, type BudgetShift, type Commitments, type StrategyInputs, type Dashboard, type Overrides, type Plan } from '@hub/core';
 
 export type RecoStatus = 'open' | 'done' | 'dismissed' | 'snoozed';
 export type RecoState = Record<string, { status: RecoStatus; until?: string; updatedBy?: string; updatedAt?: string }>;
-export interface HubData extends Dashboard { user: { email: string; layout: unknown; reco: RecoState; plans: { plans: Plan[] } | null } }
+export interface HubData extends Dashboard { user: { email: string; layout: unknown; reco: RecoState; plans: { plans: Plan[] } | null; strategy?: Partial<StrategyInputs> | null } }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
@@ -38,7 +38,7 @@ function sampleDashboard(month?: string): HubData {
     tokenExpiresInDays: 6,
     source: 'sample',
   });
-  return { ...d, user: { email: 'sample', layout: localLayout.get(), reco: local.get<RecoState>('sample-reco', {}), plans: local.get<{ plans: Plan[] } | null>('sample-plans', null) } };
+  return { ...d, user: { email: 'sample', layout: localLayout.get(), reco: local.get<RecoState>('sample-reco', {}), plans: local.get<{ plans: Plan[] } | null>('sample-plans', null), strategy: local.get<Partial<StrategyInputs> | null>('sample-strategy', null) } };
 }
 
 export async function loadDashboard(month?: string): Promise<HubData> {
@@ -100,6 +100,11 @@ export async function saveCommitment(label: string, amount: number | null) {
   const all = local.get<Commitments>('sample-commitments', {});
   if (amount === null) delete all[label]; else all[label] = Math.round(amount);
   local.set('sample-commitments', all);
+}
+
+export async function saveStrategy(s: StrategyInputs) {
+  if (!sampleMode) return put('/api/strategy', s);
+  local.set('sample-strategy', s);
 }
 
 export interface ChatTurn { role: 'user' | 'assistant'; text: string }

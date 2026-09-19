@@ -141,7 +141,7 @@ export function buildEnvelopes(budget: RiseupBudget, ctx: StatusContext = {}): E
       else if (names.length > 1) maybe = names.slice(0, 3);
     }
     let pendingMonths = 0;
-    if (!a && !isIncome) for (const month of ctx.previousUnpaid ?? []) { if (month.some((x) => close(x, planned))) pendingMonths++; else break; }
+    if (!a && !isIncome) for (const month of (ctx.previousUnpaid ?? []).slice(0, 3)) { if (month.some((x) => close(x, planned))) pendingMonths++; else break; }
     out.push(finish({
       id: e.id, kind: isIncome ? 'income' : 'fixed', type: e.type, isIncome, label: label ?? (isIncome ? 'הכנסה קבועה צפויה' : 'חיוב קבוע צפוי'), guessed, maybe, due, pendingMonths: pendingMonths || undefined,
       planned, actual: sum(e.actuals.map(actualAmount)), paid: e.actuals.length > 0, items: e.actuals.map(item),

@@ -14,7 +14,7 @@ export const DEFAULT_LAYOUT: Record<ScreenId, string[]> = {
   variable: ['variableKpis', 'budgets', 'shifts', 'everyday', 'biggest', 'installments'],
   txns: ['compare', 'transactions', 'accounts', 'excluded', 'removed'],
   trends: ['trendKpis', 'net', 'categories'],
-  recos: ['nextMonth', 'recoSummary', 'recoList', 'planner'],
+  recos: ['balance', 'nextMonth', 'recoSummary', 'recoList', 'planner'],
 };
 
 export interface Layout { screens: Record<ScreenId, string[]>; hidden: string[] }

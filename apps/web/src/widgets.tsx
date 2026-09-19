@@ -1,8 +1,9 @@
-import { EVERYDAY, type BudgetShift, type EnvelopeStatus, type Plan, type Recommendation, type Recurring, type ViewTransaction } from '@hub/core';
+import { EVERYDAY, type BudgetShift, type StrategyInputs, type EnvelopeStatus, type Plan, type Recommendation, type Recurring, type ViewTransaction } from '@hub/core';
 import { useMemo, useState, type ReactNode } from 'react';
 import { BurnChart, NetChart, SplitChart } from './components/charts.tsx';
 import { AlertList, Info, Section, Tile } from './components/ui.tsx';
 import type { Detail } from './details.tsx';
+import { Balance } from './balance.tsx';
 import { Planner } from './planner.tsx';
 import type { HubData, RecoStatus } from './lib/data.ts';
 import { money, moneyExact, monthLabel, pct, plural, shortDate, signedMoney, signedPct } from './lib/format.ts';
@@ -17,6 +18,7 @@ export interface Ctx {
   savePlans: (plans: Plan[]) => void;
   undoShift: (s: BudgetShift) => void;
   setCommitment: (label: string, amount: number | null) => void;
+  saveStrategy: (s: StrategyInputs) => void;
   go: (screen: ScreenId) => void;
 }
 
@@ -682,6 +684,7 @@ export const WIDGETS: Record<string, { name: string; render: (c: Ctx) => ReactNo
   net: { name: 'כמה נשאר בכל חודש', render: (c) => <Net {...c} /> },
   split: { name: 'קבועות מול משתנות', render: (c) => <Split {...c} /> },
   categories: { name: 'קטגוריות לעומת הממוצע', render: (c) => <Categories {...c} /> },
+  balance: { name: 'הדרך לאיזון', render: (c) => <Balance d={c.d} theme={c.theme} onSave={c.saveStrategy} /> },
   planner: { name: 'מה אם? תכנון ותחזית', render: (c) => <Planner d={c.d} theme={c.theme} onSave={c.savePlans} /> },
   recoSummary: { name: 'סיכום המלצות', render: (c) => <RecoSummary {...c} /> },
   recoList: { name: 'רשימת ההמלצות', render: (c) => <RecoList {...c} /> },

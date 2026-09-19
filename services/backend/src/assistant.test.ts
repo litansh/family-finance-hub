@@ -2,7 +2,7 @@ import { buildDashboard, sampleData } from '@hub/core';
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { handle, type ApiDeps } from './api.ts';
-import { checkPurchase, nextMonthView, overview, runForecast, searchTransactions } from './assistant-tools.ts';
+import { checkPurchase, nextMonthView, overview, pathToBalance, runForecast, searchTransactions } from './assistant-tools.ts';
 import { handler as assistant, type AskJob, type Model } from './assistant.ts';
 import { keys, MemoryStore } from './store.ts';
 import { runSync } from './sync.ts';
@@ -28,6 +28,15 @@ describe('assistant tools', () => {
     expect(c.tracked_categories).toContain(e.label);
     expect(checkPurchase(d, { amount: 1_000_000 })).toMatchObject({ verdict: 'over-budget', month_as_a_whole_is_short: true });
     expect(nextMonthView(d).expected_left_at_month_end).toBe(Math.round(d.nextMonth.net));
+  });
+
+  it('answer the strategy questions from the same baseline as the planning screen', () => {
+    const p = pathToBalance(d, { overdraftLimit: 50_000 }, { loanAmount: 100_000, incomeUp: 5000, expenseDown: 5000 });
+    expect(p.assumptions_used).toMatchObject({ overdraftLimit: 50_000, loanAmount: 100_000, monthsToBalance: 12 }); // saved + stated + default
+    expect(p.trend.typical_income_now).toBe(Math.round(d.baseline.income));
+    expect(p.options.map((o) => o.option)).toEqual(['overdraft', 'loan']);
+    expect(p.options[1]!.loan_interest_over_its_life).toBeGreaterThan(0);
+    expect(pathToBalance(d, null, { loanAmount: 0, existingLoans: [{ label: 'א', monthly: 1000, remaining: 20_000 }] }).options.map((o) => o.option)).toEqual(['overdraft', 'consolidate']);
   });
 
   it('never include what RiseUp keeps out of the cashflow', () => {

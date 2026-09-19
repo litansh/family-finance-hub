@@ -1,12 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodTool } from '@anthropic-ai/sdk/helpers/beta/zod';
-import { buildDashboard, sampleData, type Dashboard } from '@hub/core';
+import { buildDashboard, sampleData, type Dashboard, type StrategyInputs } from '@hub/core';
 import { z } from 'zod';
-import { checkPurchase, nextMonthView, overview, recommendations, runForecast, searchTransactions } from './assistant-tools.ts';
+import { checkPurchase, nextMonthView, overview, pathToBalance, recommendations, runForecast, searchTransactions } from './assistant-tools.ts';
 import { loadDashboard } from './api.ts';
 import { GetParameterCommand, SSMClient } from '@aws-sdk/client-ssm';
 import { keys, S3Store, type Store } from './store.ts';
-import { BadRequest, saveShift } from './userdata.ts';
+import { BadRequest, loadUserData, saveShift } from './userdata.ts';
 
 export interface ChatTurn { role: 'user' | 'assistant'; text: string }
 export interface AskJob { id: string; email: string; question: string; history: ChatTurn[]; month?: string; status: 'pending' | 'done' | 'error'; answer?: string; error?: string; askedAt: string; answeredAt?: string }
@@ -31,11 +31,12 @@ const SYSTEM = `אתה העוזר הפיננסי של המשפחה בתוך "ה�
   · over-budget — אין תקציב שיש בו מקום לזה. אמור זאת בפשטות ובלי להטיף: כמה חסר, וההמלצה היא לא להוציא אלא אם זה באמת דחוף או חשוב. אם זה בכל זאת חשוב — הצע את הדרך שפוגעת הכי פחות: סכום קטן יותר, או לדחות לחודש הבא (ואמור מה צפוי להישאר בו לפי next_month_expected_left).
   בנפרד מה־verdict: כש־month_as_a_whole_is_short הוא true, החודש כולו כבר בחריגה (או ייכנס אליה). גם אם הקנייה נכנסת בתקציב של הקטגוריה, אמור במשפט אחד שהחודש בכללותו במינוס ושכדאי להוציא כמה שפחות עד סופו. אל תהפוך בגלל זה "אפשר" ל"אסור".
 - shift_budget מעביר תקציב בין קטגוריות לחודש הנוכחי בלבד. קרא לו אך ורק אחרי שהמשתמש אישר במפורש בהודעה האחרונה שלו ("כן", "מאשר", "תעביר"). לעולם לא באותה תשובה שבה הצעת את ההעברה. ההעברה נרשמת במרכז הכספים בלבד — התקציב ברייזאפ עצמו לא משתנה — ואפשר לבטל אותה בהעברה הפוכה. אחרי העברה, אמור מה התקציב החדש של שתי הקטגוריות.
+- plan_path_to_balance הוא הכלי לשאלות האסטרטגיות: "כמה אנחנו חייבים לחתוך", "האם כדאי לקחת הלוואה של 100,000 כדי לעבור את השנה", "האם כדאי לאחד הלוואות", "מתי נתאזן". הוא מודד את המגמה בהכנסות ובהוצאות, מחשב כמה צריך לחתוך בחודש כדי להתאזן עד היעד, כמה גדול הבור שבדרך, ומשווה בין הדרכים לשאת אותו (מינוס, הלוואת גישור, איחוד, איחוד + גישור) לפי עלות כוללת, נקודת השפל, והחודש שממנו מאוזנים. העבר לו רק מה שהמשפחה אמרה; כל השאר נלקח ממה שהזינו במסך התכנון. בתשובה: (1) פתח במסקנה; (2) אמור במפורש אילו הנחות הנחת ולא נאמרו לך (ריבית, מסגרת, יתרה); (3) הבהר שהלוואת גישור קונה זמן ולא איזון: ההחזר שלה הוא הוצאה חדשה, והיא משתלמת רק אם השיפור בהכנסות ובהוצאות באמת מגיע. אם אף דרך לא מחזיקה, אמור כמה שיפור חודשי נוסף חסר; (4) לאיחוד הלוואות צריך את ההחזר החודשי ואת היתרה לסילוק של כל הלוואה — רייזאפ לא מוסר אותן, אז בקש אותן אם לא נאמרו; (5) משפט אחד שזה לא ייעוץ מורשה ושכדאי לקבל הצעת ריבית אמיתית לפני החלטה.
 - אתה לא יועץ פיננסי מורשה. לפני החלטה גדולה כמו הלוואה, ציין זאת במשפט אחד ולא יותר.
 
 איך לכתוב: פתח בתשובה עצמה. מספרים בשקלים עם ₪ ופסיקים. תשובות קצרות לשאלות פשוטות; לשאלות מורכבות — כמה פסקאות קצרות או רשימה ממוספרת של צעדים. בלי טבלאות Markdown ובלי כותרות, כי התשובה מוצגת בצ'אט בטלפון.`;
 
-export interface ToolContext { store?: Store; email: string; now: string; liveMonth: string }
+export interface ToolContext { store?: Store; email: string; now: string; liveMonth: string; strategy?: Partial<StrategyInputs> | null }
 
 function tools(d: Dashboard, ctx: ToolContext) {
   const json = (v: unknown) => JSON.stringify(v);
@@ -105,6 +106,21 @@ function tools(d: Dashboard, ctx: ToolContext) {
         }
       },
     }),
+    betaZodTool({
+      name: 'plan_path_to_balance',
+      description: 'Strategy for a household that spends more than it earns: measures the income and expense trend, the monthly cut needed to balance by a target month, the hole dug on the way, and compares ways to carry it (overdraft, a bridge loan, consolidating existing loans, or both) by total cost, lowest balance and the month from which they are balanced. Pass only what the family stated; the rest comes from their planning screen or from defaults, and is echoed back in assumptions_used.',
+      inputSchema: z.object({
+        monthsToBalance: z.number().optional().describe('Target, in months. Default 12.'),
+        incomeUp: z.number().optional().describe('Extra monthly income reached by the target month, ILS'), expenseDown: z.number().optional().describe('Monthly spending cut reached by the target month, ILS'),
+        otherIncomePerMonth: z.number().optional().describe('Irregular income (bonuses, side work) the family is willing to count on, averaged per month. The trend reports what it has been.'),
+        followIncomeTrend: z.boolean().optional().describe('Also let income keep growing at its measured slope for up to a year'),
+        startBalance: z.number().optional(), overdraftLimit: z.number().optional().describe('Positive number: how far below zero the bank allows'), overdraftRatePct: z.number().optional(),
+        loanAmount: z.number().optional().describe('Bridge loan being considered; 0 to skip'), loanRatePct: z.number().optional(), loanMonths: z.number().optional(),
+        existingLoans: z.array(z.object({ label: z.string(), monthly: z.number(), remaining: z.number().describe('Payoff balance today') })).optional(),
+        consolidateInstallments: z.boolean().optional().describe('Fold the open card installment plans into the consolidation'),
+      }),
+      run: async (i) => json(pathToBalance(d, ctx.strategy, i)),
+    }),
     betaZodTool({ name: 'get_recommendations', description: 'The recommendations the hub already derived from the data, each with its evidence, steps and estimated yearly saving.', inputSchema: z.object({}), run: async () => json(recommendations(d)) }),
   ];
 }
@@ -146,11 +162,12 @@ const claude: Model = async ({ system, messages, tools }) => {
 };
 
 export async function answer(job: AskJob, d: Dashboard, model: Model = claude, today = new Date().toISOString().slice(0, 10), store?: Store): Promise<string> {
+  const saved = store ? (await loadUserData(store, job.email)).strategy : null;
   const messages: Anthropic.Beta.BetaMessageParam[] = [
     ...job.history.slice(-8).map((t) => ({ role: t.role, content: t.text })),
     { role: 'user' as const, content: `[היום ${today}. החודש המוצג: ${d.status.month}. שואל/ת: ${job.email}]\n\n${job.question}` },
   ];
-  return model({ system: SYSTEM, messages, tools: tools(d, { store, email: job.email, now: new Date().toISOString(), liveMonth: today.slice(0, 7) }) });
+  return model({ system: SYSTEM, messages, tools: tools(d, { store, email: job.email, now: new Date().toISOString(), liveMonth: today.slice(0, 7), strategy: saved }) });
 }
 
 // Invoked asynchronously by the API Lambda. The answer lands in the job file,

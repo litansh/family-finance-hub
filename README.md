@@ -42,6 +42,12 @@ UI on your own domain, locked to the two to four people you list.
   from a category that is under budget, and does it only after you approve. If
   nothing has room, it says so: only if it really matters. Shifts live in the
   hub, are never deleted, and RiseUp itself is not changed.
+- **The path to balance.** For a household that spends more than it earns: the
+  trend of recurring income and of expenses, the monthly cut it takes to balance
+  by a target month, the hole dug on the way, and the ways to carry it compared
+  by total cost: overdraft, a bridge loan, consolidating existing loans, or both.
+  It also shows how the shortfall is covered today (money RiseUp keeps out of the
+  cashflow), and says plainly when a loan only buys time.
 - **What-if planner.** A bonus, a raise, a new loan: see the months ahead and a
   safe daily spend.
 - **Ask in Hebrew** (optional). An assistant on Claude that answers only through

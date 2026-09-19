@@ -349,3 +349,7 @@ table.data td.n, table.data th.n { text-align: end; direction: ltr; font-variant
 .bubble.assistant { background: var(--sunken); justify-self: end; border-end-end-radius: 0.25rem; }
 .chat-input { display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end; position: sticky; bottom: 0; background: var(--card); padding-top: 0.5rem; }
 .chat-input textarea { min-height: 3rem; border-radius: 0.875rem; border: 1px solid var(--axis); background: var(--bg); color: var(--text); font: inherit; font-size: 1rem; padding: 0.625rem 0.875rem; width: 100%; resize: none; }
+
+/* A checkbox with its sentence, used in the planning assumptions. */
+.check { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.9375rem; line-height: 1.4; margin: 0.25rem 0 0.75rem; }
+.check input { width: 1.25rem; height: 1.25rem; flex: none; margin-top: 0.1rem; }
