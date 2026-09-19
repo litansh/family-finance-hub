@@ -167,7 +167,7 @@ export async function handler(event: { jobId?: string; selfTest?: boolean }, dep
       // Says what kind of credential is stored, never the credential.
       const k = await apiKey().catch(() => '');
       const kind = k.startsWith('sk-ant-api') ? 'api-key' : k.startsWith('sk-ant-oat') ? 'claude-code-oauth-token' : k.startsWith('sk-ant-admin') ? 'admin-key' : k ? 'unrecognized' : 'missing';
-      throw new Error(`self-test failed: ${e instanceof Anthropic.APIError ? `Anthropic ${e.status}` : (e as Error).name}; stored credential kind: ${kind}, length ${k.length}, has whitespace: ${/\s/.test(k)}`);
+      throw new Error(`self-test failed: ${e instanceof Anthropic.APIError ? `Anthropic ${e.status} ${String(e.message).replace(/sk-ant-[\w-]+/g, '[key]').slice(0, 300)}` : (e as Error).name}; stored credential kind: ${kind}, length ${k.length}, has whitespace: ${/\s/.test(k)}`);
     }
   }
   if (!event.jobId) return;
