@@ -105,29 +105,34 @@ describe('committed categories', () => {
   const e = plain.status.envelopes.filter((x) => x.kind === 'tracked')[0]!;
   const withC = (c: Commitments) => buildDashboard({ budget: s.budgets.get(s.current)!, transactions: s.transactions, today, lastSyncAt: null, commitments: c });
 
-  it('without any, what is free is exactly what is left to spend', () => {
-    expect(plain.free.committed).toEqual([]);
-    expect(plain.free.restLeft).toBeCloseTo(plain.status.flexible.left);
-    expect(plain.free.freeForRest).toBeCloseTo(plain.status.flexible.planned);
+  const tracked = plain.status.envelopes.filter((x) => x.kind === 'tracked');
+  const setAside = (d: typeof plain) => d.status.envelopes.filter((x) => x.kind === 'tracked').reduce((t, x) => t + Math.max(x.planned, x.actual), 0);
+
+  it('sets every rubric aside at RiseUp\'s own target, with nothing typed in', () => {
+    expect(plain.free.committed.map((c) => c.label).sort()).toEqual(tracked.map((x) => x.label).sort());
+    expect(plain.free.committed.every((c) => !c.own)).toBe(true);
+    expect(plain.free.committedTotal).toBeCloseTo(setAside(plain));
+    expect(plain.free.freeForRest).toBeCloseTo(plain.status.flexible.planned - setAside(plain));
+    const everyday = plain.status.envelopes.find((x) => x.kind === 'everyday')!;
+    expect(plain.free.restSpent).toBeCloseTo(everyday.actual);
+    // a target not yet used up is not free money
+    expect(plain.free.restLeft).toBeLessThanOrEqual(plain.status.flexible.left + 0.01);
   });
 
-  it('the committed amount becomes the budget, RiseUp\'s stays visible, and it is set aside first', () => {
+  it('an amount of our own replaces RiseUp\'s target for that rubric, and RiseUp\'s stays visible', () => {
     const amount = Math.round(e.actual) + 500; // more than was spent
     const d = withC({ [e.label]: amount });
     const env = d.status.envelopes.find((x) => x.kind === 'tracked' && x.label === e.label)!;
     expect(env).toMatchObject({ planned: amount, committed: true });
     expect(env.riseupPlanned).toBeCloseTo(e.planned);
-    expect(d.free.committed).toMatchObject([{ label: e.label, amount, counted: amount }]);
-    expect(d.free.freeForRest).toBeCloseTo(plain.status.flexible.planned - amount);
-    expect(d.free.restSpent).toBeCloseTo(plain.status.flexible.spent - e.actual);
-    // money committed and not yet spent is not free
-    expect(d.free.restLeft).toBeCloseTo(plain.status.flexible.left - (amount - e.actual));
+    expect(d.free.committed.find((c) => c.label === e.label)).toMatchObject({ amount, counted: amount, own: true });
+    expect(d.free.freeForRest).toBeCloseTo(plain.free.freeForRest - (amount - Math.max(e.planned, e.actual)));
   });
 
   it('an overrun eats into the rest, never hides', () => {
     const d = withC({ [e.label]: 1 });
-    expect(d.free.committed[0]!.counted).toBeCloseTo(Math.max(e.actual, 1));
-    expect(d.free.restLeft).toBeCloseTo(plain.status.flexible.left - Math.max(1 - e.actual, 0));
+    expect(d.free.committed.find((c) => c.label === e.label)!.counted).toBeCloseTo(Math.max(e.actual, 1));
+    expect(d.free.committedTotal).toBeCloseTo(setAside(d));
   });
 
   it('a shift moves on top of the commitment', () => {

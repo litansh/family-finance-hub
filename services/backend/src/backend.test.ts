@@ -197,9 +197,9 @@ describe('the hub keeps its own data', () => {
     expect((await put('/api/commitment', { label: e.label, amount: 4321 }, 'noa@example.com')).statusCode).toBe(200);
     const after = await dashboard('alex@example.com');
     expect(after.status.envelopes.find((x: { label: string }) => x.label === e.label)).toMatchObject({ planned: 4321, committed: true });
-    expect(after.free.committed).toMatchObject([{ label: e.label, amount: 4321 }]);
+    expect(after.free.committed.find((c: { label: string }) => c.label === e.label)).toMatchObject({ amount: 4321, own: true });
     expect((await put('/api/commitment', { label: e.label, amount: null })).statusCode).toBe(200);
-    expect((await dashboard()).free.committed).toEqual([]);
+    expect((await dashboard()).free.committed.find((c: { label: string }) => c.label === e.label)).toMatchObject({ amount: e.planned, own: false });
     for (const bad of [{ amount: 5 }, { label: e.label, amount: -1 }, { label: e.label, amount: 'x' }, { label: 'x'.repeat(61), amount: 5 }])
       expect((await put('/api/commitment', bad)).statusCode).toBe(400);
   });

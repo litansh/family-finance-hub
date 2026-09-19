@@ -191,25 +191,25 @@ function Free({ d, setCommitment, go }: Ctx) {
   );
   return (
     <Section title="כמה באמת פנוי" hint={<span className="num">{signedMoney(f.restLeft)}</span>}
-      note='יש הוצאות שרייזאפ מסווג כ"משתנות" אבל בפועל הן קבועות: סופר, פארמה. בחרו קטגוריה, תנו לה סכום חודשי והתחייבו אליו. מאותו רגע זה התקציב שלה כאן, והוא מופרש מראש, כך שהשורה האחרונה מראה מה נשאר באמת לכל שאר ההוצאות המשתנות.'>
+      note="הכנסות, פחות ההוצאות הקבועות, פחות היעד שקבעתם ברייזאפ לכל רובריקה (סופר, פנאי, בריאות וכו'). מה שנשאר הוא מה שפנוי באמת לכל שאר ההוצאות המשתנות. רובריקה שחרגה מהיעד נספרת לפי מה שיצא בפועל. רוצים סכום אחר מזה שברייזאפ? אפשר להתחייב כאן לסכום משלכם.">
       <div className="rows">
         {line('הכנסות צפויות', <span className="in">{money(f.income)}</span>)}
         <button type="button" className="row tap" onClick={() => go('fixed')}><span className="name">פחות הוצאות קבועות</span><span className="amt">−{money(f.fixed)}</span><div className="meta"><span>שולם {money(d.status.fixed.paid)} · ממתין {money(d.status.fixed.pending)}</span></div></button>
         {f.goals > 0 && line('פחות חיסכון ליעדים', <>−{money(f.goals)}</>)}
         {f.committed.map((c) => line(`פחות ${c.label}`, <>−{money(c.counted)}</>, <>
-          <span>התחייבתם ל־<span className="num">{money(c.amount)}</span> · יצאו <span className="num">{money(c.spent)}</span></span>
+          <span>{c.own ? 'התחייבתם ל־' : 'יעד ברייזאפ: '}<span className="num">{money(c.amount)}</span> · יצאו <span className="num">{money(c.spent)}</span></span>
+          {c.own && c.riseupBudget !== undefined && <span>ברייזאפ: <span className="num">{money(c.riseupBudget)}</span></span>}
           {c.spent > c.amount && <span className="pill p1">חריגה של {money(c.spent - c.amount)}</span>}
         </>, false, c.label))}
         {line('פנוי לכל שאר ההוצאות המשתנות', signedMoney(f.freeForRest), undefined, true)}
         {line('כבר יצא על שאר המשתנות', <>−{money(f.restSpent)}</>)}
         {line(f.restLeft >= 0 ? 'נשאר' : 'חריגה', <span className={`delta ${f.restLeft >= 0 ? 'good' : 'bad'}`}>{money(Math.abs(f.restLeft))}</span>, f.restLeft > 0 && d.status.daysLeft > 0 ? <span>בערך <span className="num">{money(f.restLeftPerDay)}</span> ליום</span> : undefined, true)}
       </div>
-      {f.committed.length === 0 && !editing && <p className="explain">עוד לא התחייבתם לאף קטגוריה, ולכן המספרים כאן זהים ל"נשאר להוציא".</p>}
-      <button className="more" onClick={() => setEditing(!editing)}>{editing ? 'סיום' : 'בחירת קטגוריות והתחייבות לסכום'}</button>
+      <button className="more" onClick={() => setEditing(!editing)}>{editing ? 'סיום' : 'סכום משלכם לרובריקה (במקום היעד שברייזאפ)'}</button>
       {editing && (
         <div className="rows">
           {tracked.map((e) => <CommitRow key={e.label} e={e} onSave={(amount) => setCommitment(e.label, amount)} />)}
-          {tracked.length === 0 && <p className="explain">אין קטגוריות במעקב ברייזאפ. הגדירו קטגוריה במעקב באפליקציית רייזאפ והיא תופיע כאן.</p>}
+          {tracked.length === 0 && <p className="explain">אין רובריקות עם יעד ברייזאפ. הגדירו יעד לרובריקה באפליקציית רייזאפ והיא תופיע כאן.</p>}
         </div>
       )}
     </Section>

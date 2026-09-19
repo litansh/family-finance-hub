@@ -35,10 +35,11 @@ export function shiftTotals(shifts: BudgetShift[], month: string): Map<string, n
 }
 
 // ---- Commitments -----------------------------------------------------------------
-// Some variable categories are fixed in all but name: groceries, the pharmacy.
-// The family names a monthly amount for one and commits to it. From then on it
-// is that category's budget in the hub, and it is set aside before anything is
-// called free. RiseUp's own budget for the category is kept next to it.
+// The family gives each rubric a monthly target in RiseUp (groceries, leisure,
+// health). Every one of them is set aside before anything is called free, at
+// RiseUp's target. Where the family wants a different number than RiseUp's, it
+// commits to its own here: that becomes the rubric's budget in the hub, with
+// RiseUp's kept next to it.
 
 export type Commitments = Record<string, number>; // tracked category label → ILS per month
 
@@ -46,16 +47,17 @@ export interface FreeToSpend {
   income: number;
   fixed: number;
   goals: number;
-  committed: { label: string; amount: number; spent: number; counted: number; riseupBudget?: number }[];
+  committed: { label: string; amount: number; spent: number; counted: number; own: boolean; riseupBudget?: number }[];
   committedTotal: number; // what is set aside for them: the commitment, or what was spent when that is more
-  freeForRest: number; // income − fixed − goals − committed: all other variable spending lives here
-  restSpent: number; // variable spending outside the committed categories
+  freeForRest: number; // income − fixed − goals − rubric targets: all other variable spending lives here
+  restSpent: number; // variable spending outside the rubrics
   restLeft: number;
   restLeftPerDay: number;
 }
 
 export function freeToSpend(status: MonthStatus): FreeToSpend {
-  const committed = status.envelopes.filter((e) => e.kind === 'tracked' && e.committed).map((e) => ({ label: e.label, amount: e.planned, spent: e.actual, counted: Math.max(e.planned, e.actual), riseupBudget: e.riseupPlanned }));
+  const committed = status.envelopes.filter((e) => e.kind === 'tracked').map((e) => ({ label: e.label, amount: e.planned, spent: e.actual, counted: Math.max(e.planned, e.actual), own: !!e.committed, riseupBudget: e.riseupPlanned }))
+    .sort((a, b) => b.amount - a.amount);
   const committedTotal = sum(committed.map((c) => c.counted));
   const income = status.income.expected, fixed = status.fixed.planned, goals = status.goals.planned;
   const freeForRest = income - fixed - goals - committedTotal;
