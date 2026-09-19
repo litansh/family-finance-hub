@@ -17,8 +17,20 @@ want_email=$(git config hooks.email)
 # No gh, or not logged in: not this hook's business. It guards identity, not
 # tooling, and a developer without gh should still be able to push.
 command -v gh >/dev/null 2>&1 || exit 0
-who=$(gh api user --jq .login 2>/dev/null) || exit 0
-[ -n "$who" ] || exit 0
+
+# A repository can pin its pushes to one account, whatever gh's active account is:
+#   git config --local credential.https://github.com.helper \
+#     '!f() { test "$1" = get && echo "username=<login>" && echo "password=$(gh auth token --user <login>)"; }; f'
+#   git config --local hooks.pinned true
+# Then the push cannot go out as anyone else, and only the commit email is left to check.
+pinned=$(git config hooks.pinned)
+if [ "$pinned" = "true" ]; then
+  who=$want
+  gh auth token --user "$want" >/dev/null 2>&1 || { echo "pre-push: refusing — pinned to '$want', but gh has no login for it. Fix: gh auth login" >&2; exit 1; }
+else
+  who=$(gh api user --jq .login 2>/dev/null) || exit 0
+  [ -n "$who" ] || exit 0
+fi
 
 if [ "$who" != "$want" ]; then
   echo "pre-push: refusing — gh is acting as '$who', not '$want'." >&2

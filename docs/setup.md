@@ -157,6 +157,16 @@ git config hooks.ghuser <your GitHub login>
 git config hooks.email  <the commit email this repository uses>
 ```
 
+If the active account keeps flipping, pin this repository to one login instead, so
+its pushes never depend on which account is active:
+
+```bash
+git config --local --replace-all credential.https://github.com.helper ""
+git config --local --add credential.https://github.com.helper \
+  '!f() { test "$1" = get && echo "username=<login>" && echo "password=$(gh auth token --user <login>)"; }; f'
+git config --local hooks.pinned true
+```
+
 ## Local development
 
 ```bash
